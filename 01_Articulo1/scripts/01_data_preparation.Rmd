@@ -1,0 +1,2453 @@
+---
+title: "Article 1 — Embera Chamí Neuropsychological Profile"
+subtitle: "Step 1: Data Preparation"
+author:
+  - name: "Carlos E. Zapata Bohórquez"
+    affiliation: "Universidad Pública de Navarra (UPNA)"
+date: "`r format(Sys.time(), '%d %B %Y')`"
+output:
+  html_document:
+    toc: true
+    toc_depth: 3
+    toc_float: true
+    number_sections: true
+    theme: flatly
+    highlight: tango
+    df_print: paged
+    code_folding: show
+  pdf_document:
+    toc: true
+    number_sections: true
+    highlight: tango
+params:
+  path_xlsx: "Database_indígenas_colombia_ORIGIN.xlsx"
+  n_expected: 88
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo    = TRUE,
+  warning = FALSE,
+  message = FALSE,
+  comment = "#>",
+  fig.align = "center"
+)
+```
+
+---
+
+> **Scope of this document:** Data loading, variable renaming, composite
+> construction, direction inversion, linguistic dominance index, acculturation
+> score, and final analytic dataset creation. No descriptive statistics or
+> inferential analyses are run here. Those belong to Steps 2–5.
+>
+> **Reporting standard:** STROBE (observational cross-sectional study).  
+> **Ethics:** Comité de Ética Facultad de Medicina, Universidad de los Andes.
+> Acta N° 202001281, sesión 28/01/2020.
+
+---
+
+# Setup {#setup}
+
+
+
+```{r packages}
+# Install missing packages silently
+.pkgs <- c("readxl", "dplyr", "tidyr", "stringr", "purrr", "knitr",
+           "kableExtra")
+.missing <- setdiff(.pkgs, rownames(installed.packages()))
+if (length(.missing)) install.packages(.missing, dependencies = TRUE)
+
+suppressPackageStartupMessages({
+  library(readxl)
+  library(dplyr, warn.conflicts = FALSE)
+  library(tidyr)
+  library(stringr)
+  library(purrr)
+  library(knitr)
+  library(fmsb)
+  library(kableExtra)
+})
+
+# Seed (not critical here; required for reproducibility in Steps 3–5)
+set.seed(20260101)
+```
+
+```{r session-info}
+# Record software version for the Methods section of the manuscript
+cat("R version:", R.version.string, "\n")
+cat("Execution timestamp:", format(Sys.time(), "%Y-%m-%d %H:%M:%S %Z"), "\n")
+```
+
+---
+
+# Data Loading {#load}
+
+> **Structural note (documented for STROBE flow):** The raw Excel file
+> contains **109 rows** in sheet *Total Bateria*. The last **21 rows are
+> structurally empty** (cascade of blank cells / string "NA"). Filtering on
+> non-missing `ID` recovers the complete analytic sample of **N = 88** adults.
+> This is not attrition; the empty rows are an artefact of the original data
+> entry template.
+
+```{r load-data}
+path_xlsx <- "C:/Users/LENOVO/Mi unidad/Maestria_Uniandes/01_Articulo1/data/Database_indígenas_colombia_ORIGIN.xlsx"
+
+df_raw <- read_excel(
+  path      = path_xlsx,
+  sheet     = "Total Bateria",
+  na        = c("", "NA", "Na", "na", "NaN", "nan", "."),
+  guess_max = 200
+)
+
+df_raw <- df_raw %>% filter(!is.na(ID))
+
+stopifnot(
+  "Raw file does not contain the expected 88 cases after ID filter" =
+    nrow(df_raw) == params$n_expected
+)
+
+cat("Rows with data (non-NA ID):", nrow(df_raw), "\n")
+cat("Total columns in original file:", ncol(df_raw), "\n")
+```
+
+---
+
+# Analytic Renaming {#rename}
+
+All key columns are renamed to ASCII `snake_case` to avoid backtick escaping
+throughout the pipeline (psych, lm, ggplot2). The original Spanish column
+names are preserved in `df_raw` for audit purposes.
+
+```{r rename}
+df <- df_raw %>%
+  rename(
+    # ── Sociodemographics ────────────────────────────────────────────────────
+    edad      = `Edad`,
+    genero    = `Género`,
+    educacion = `Años de educacion`,
+    bilingue  = `BILINGÜE`,
+
+    # ── Linguistic competence — First language (L1 = Embera) ────────────────
+    pi_expresion   = `Comp_Linguistica_P_I_Expresión`,
+    pi_comprension = `Comp_Linguistica_P_I_Comprensión`,
+    pi_lectura     = `Comp_Linguistica_P_I_Lectura`,
+    pi_escritura   = `Comp_Linguistica_P_I_Escritura`,
+    pi_acento      = `Comp_Linguistica_P_I_Acento`,
+
+    # ── Linguistic competence — Second language (L2 = Spanish) ──────────────
+    si_expresion   = `Comp_Linguistica_S_I_Expresión`,
+    si_comprension = `Comp_Linguistica_S_I_Comprensión`,
+    si_lectura     = `Comp_Linguistica_S_I_Lectura`,
+    si_escritura   = `Comp_Linguistica_S_I_Escritura`,
+    si_acento      = `Comp_Linguistica_S_I_Acento`,
+
+    # ── Screening instruments ────────────────────────────────────────────────
+    mmse   = MMSE,
+    phq9   = `PHQ-9`,
+    bartel = Bartel,
+
+    # ── Neuropsychological battery — Rey Complex Figure ──────────────────────
+    rey_copia   = `Figura de rey puntuación copia`,
+    rey_memoria = `Figura de rey puntuación memoria inmediata`,
+
+    # ── Verbal fluency ───────────────────────────────────────────────────────
+    flu_fon_M        = `Fluidez FyS verbal M`,
+    flu_fon_R        = `Fluidez FyS verbal R`,
+    flu_fon_P        = `Fluidez FyS verbal P`,
+    flu_sem_animales = `Fluidez FyS semantica animales`,
+    flu_sem_frutas   = `Fluidez FyS semantica frutas`,
+
+    # ── HVLT-R ───────────────────────────────────────────────────────────────
+    hvlt_e1       = `HLVRT-R ensayo 1`,
+    hvlt_e2       = `HLVRT-R ensayo 2`,
+    hvlt_e3       = `HLVRT-R ensayo 3`,
+    hvlt_total    = `HLVRT-R Total recuerdo inmediato`,
+    hvlt_tardia   = `HLVRT-R evocación tardía`,
+    hvlt_recon    = `HLVRT-R Reconocimiento total correctas`,
+    hvlt_fp_rel   = `HLVRT-R Falsos positivos semanticamente relacionados`,
+    hvlt_fp_norel = `HLVRT-R Falsos positivos no relacionados semanticamente`,
+    hvlt_errores  = `HLVRT-R Número total errores`,
+
+    # ── Stroop ───────────────────────────────────────────────────────────────
+    stroop_p       = `STROOP P`,
+    stroop_c       = `STROOP C`,
+    stroop_pc      = `STROOP PC`,
+    stroop_pc_calc = `STROOP pc Calculado`,
+    stroop_interf  = `STROOP Interferencia`,
+
+    # ── M-WCST ───────────────────────────────────────────────────────────────
+    wcst_cat       = `M-WCST categorías correctas`,
+    wcst_persev    = `M-WCST perseveraciones`,
+    wcst_err       = `M-WCST errores`,
+    wcst_err_total = `M-WCST total errores`,
+
+    # ── Trail Making Test ────────────────────────────────────────────────────
+    tmt_a = `TMT A tiempo (sg)`,
+    tmt_b = `TMT B tiempo (sg)`,
+
+    # ── BTA ──────────────────────────────────────────────────────────────────
+    bta_n     = `BTA-N`,
+    bta_l     = `BTA-L`,
+    bta_total = `BTA Total`,
+
+    # ── SDMT ─────────────────────────────────────────────────────────────────
+    sdmt_correct = `SDMT Aciertos`,
+    sdmt_err     = `SDMT Errores`
+  )
+```
+
+---
+
+# Variable Typing {#typing}
+
+```{r typing}
+df <- df %>%
+  mutate(
+    genero    = factor(genero,
+                       levels = c("H", "M"),
+                       labels = c("Male", "Female")),
+    edad      = as.numeric(edad),
+    educacion = as.numeric(educacion)
+  )
+
+# Hard assertions
+stopifnot(
+  "genero is not a 2-level factor" =
+    is.factor(df$genero) && nlevels(df$genero) == 2,
+  "edad is not numeric"     = is.numeric(df$edad),
+  "educacion is not numeric" = is.numeric(df$educacion)
+)
+
+cat("genero levels:", levels(df$genero), "\n")
+cat("edad class:", class(df$edad), "\n")
+cat("educacion class:", class(df$educacion), "\n")
+```
+
+---
+
+# Neuropsychological Composites {#composites}
+
+```{r composites}
+df <- df %>%
+  mutate(
+    # Phonological fluency total (letters M + R + P)
+    flu_fon_total = flu_fon_M + flu_fon_R + flu_fon_P,
+
+    # Semantic fluency total (animals + fruits)
+    flu_sem_total = flu_sem_animales + flu_sem_frutas
+  )
+
+cat("flu_fon_total — range:", range(df$flu_fon_total, na.rm = TRUE), "\n")
+cat("flu_sem_total — range:", range(df$flu_sem_total, na.rm = TRUE), "\n")
+```
+
+---
+
+# Structural Redundancy Check {#redundancy}
+
+Three variables in the battery are computed totals of their sub-components.
+We confirm consistency before any analysis. If any assertion fails, the script
+halts loudly rather than propagating silent errors.
+
+```{r redundancy-check}
+.diag <- df %>%
+  summarise(
+    # HVLT-R total = trial 1 + trial 2 + trial 3
+    hvlt_ok = all(
+      abs((hvlt_e1 + hvlt_e2 + hvlt_e3) - hvlt_total) < 1e-6,
+      na.rm = TRUE
+    ),
+    # BTA total = N subscale + L subscale
+    bta_ok = all(
+      abs((bta_n + bta_l) - bta_total) < 1e-6,
+      na.rm = TRUE
+    ),
+    # M-WCST total errors = perseverations + non-perseverative errors
+    wcst_ok = all(
+      abs((wcst_persev + wcst_err) - wcst_err_total) < 1e-6,
+      na.rm = TRUE
+    )
+  )
+
+kable(.diag,
+      caption = "Structural Redundancy Verification (TRUE = consistent)",
+      col.names = c("HVLT total = e1+e2+e3",
+                    "BTA total = N+L",
+                    "WCST err_total = persev+err")) %>%
+  kable_styling(bootstrap_options = c("striped", "condensed"),
+                full_width = FALSE)
+
+stopifnot(
+  "HVLT total does not equal sum of trials" = isTRUE(.diag$hvlt_ok),
+  "BTA total does not equal N + L"          = isTRUE(.diag$bta_ok),
+  "WCST err_total != persev + err"           = isTRUE(.diag$wcst_ok)
+)
+```
+
+---
+
+# Direction Inversion {#inversion}
+
+TMT (time in seconds) and WCST error counts are *lower-is-better* metrics.
+All 13 primary indicators are sign-inverted so that **higher values = better
+performance** across the board. This ensures uniform directionality in
+correlation matrices, regression coefficients, and forest plots.
+
+> **Note:** Inversion preserves the original scale; only the sign is flipped.
+> No z-standardisation is applied here (done within regression models if
+> needed).
+
+```{r invert}
+df <- df %>%
+  mutate(
+    # Primary outcomes (enter models)
+    tmt_a_inv = -1 * tmt_a,
+    tmt_b_inv = -1 * tmt_b,
+
+    # Secondary / sensitivity indicators
+    wcst_persev_inv = -1 * wcst_persev,
+    wcst_err_inv    = -1 * wcst_err
+  )
+
+cat("tmt_a_inv — range:", range(df$tmt_a_inv, na.rm = TRUE), "\n")
+cat("tmt_b_inv — range:", range(df$tmt_b_inv, na.rm = TRUE), "\n")
+```
+
+---
+
+# Acculturation Score {#acculturation}
+
+The acculturation score is the **unweighted sum** of 16 Likert items (1–5
+each). Higher scores indicate greater integration into the majority
+(mestizo-Colombian) culture.
+
+- Theoretical range: **16–80**
+- All 88 participants have complete AC_ data (no imputation required)
+
+```{r acculturation}
+ac_items <- c(
+  "AC_Hablar", "AC_Leer", "AC_Escribir", "AC_Idioma_Infancia",
+  "AC_Idioma_casa", "AC_Idioma_trabajo", "AC_Idioma_amigos",
+  "AC_Idioma_pensamiento", "AC_Amigos_cercanos", "AC_Fiestas",
+  "AC_Visitas", "AC_Amigos_hijos", "AC_Rituales", "AC_Religion",
+  "AC_Vestimenta", "AC_Se_considera"
+)
+
+stopifnot("AC_ columns not found in df" = all(ac_items %in% names(df)))
+
+df <- df %>%
+  mutate(across(all_of(ac_items), as.numeric)) %>%
+  mutate(
+    acculturation_total = rowSums(across(all_of(ac_items)), na.rm = FALSE)
+  )
+
+cat("acculturation_total\n")
+cat("  NA count:", sum(is.na(df$acculturation_total)), "\n")
+cat("  Min:", min(df$acculturation_total, na.rm = TRUE),
+    "| Max:", max(df$acculturation_total, na.rm = TRUE),
+    "| Mean:", round(mean(df$acculturation_total, na.rm = TRUE), 2), "\n")
+```
+
+---
+
+# Linguistic Dominance Index (L1/L2) {#dominance}
+
+## Definition
+
+$$
+\text{dom\_L1L2} =
+\underbrace{\bar{x}(\text{Expression}_{L1},\, \text{Comprehension}_{L1},\, \text{Reading}_{L1},\, \text{Writing}_{L1})}_{\text{Embera proficiency}}
+-
+\underbrace{\bar{x}(\text{Expression}_{L2},\, \text{Comprehension}_{L2},\, \text{Reading}_{L2},\, \text{Writing}_{L2})}_{\text{Spanish proficiency}}
+$$
+
+- Items are Likert-scaled 1–5 (higher = higher self-rated proficiency).
+- Theoretical range: **−4 to +4**.
+- **Positive values** → Embera dominance (L1 > L2).
+- **Negative values** → Spanish dominance (L2 > L1).
+- **≈ 0** → balanced bilingualism.
+
+## Rationale for mean-difference (not sum-difference)
+
+Using the **mean** of the four skills (rather than the raw sum) keeps the
+index on the native 1–5 Likert metric, making the regression coefficient
+directly interpretable as the change in cognitive score per one-point increase
+in relative Embera dominance.
+
+## Missing data
+
+Pre-inspection confirmed all 88 participants have complete data on the
+8 proficiency items. No imputation is applied. The commented block below
+provides a median-imputation fallback for transparency.
+
+```{r dominance}
+pi_vars <- c("pi_expresion", "pi_comprension", "pi_lectura", "pi_escritura")
+si_vars <- c("si_expresion", "si_comprension", "si_lectura", "si_escritura")
+
+# Force numeric (character coercion guard from Excel read)
+df <- df %>%
+  mutate(across(all_of(c(pi_vars, si_vars)), as.numeric))
+
+# # Median-imputation fallback (not applied; all cases complete)
+# df <- df %>%
+#   mutate(across(all_of(c(pi_vars, si_vars)),
+#     ~ ifelse(is.na(.x), median(.x, na.rm = TRUE), .x)))
+
+df <- df %>%
+  rowwise() %>%
+  mutate(
+    l1_proficiency = mean(c_across(all_of(pi_vars)), na.rm = FALSE),
+    l2_proficiency = mean(c_across(all_of(si_vars)), na.rm = FALSE),
+    dom_L1L2       = l1_proficiency - l2_proficiency
+  ) %>%
+  ungroup()
+
+cat("dom_L1L2\n")
+cat("  NA count:", sum(is.na(df$dom_L1L2)), "\n")
+cat("  Min:", round(min(df$dom_L1L2, na.rm = TRUE), 3),
+    "| Max:", round(max(df$dom_L1L2, na.rm = TRUE), 3),
+    "| Mean:", round(mean(df$dom_L1L2, na.rm = TRUE), 3), "\n")
+```
+
+---
+
+# Final Analytic Dataset {#final-dataset}
+
+```{r final-dataset}
+# ── Variable name vectors (also saved to vars_lookup.rds) ──────────────────
+
+primary_outcomes_13 <- c(
+  "hvlt_total", "hvlt_tardia", "hvlt_recon",    # verbal memory
+  "rey_memoria", "rey_copia",                    # visuospatial
+  "flu_fon_total", "flu_sem_total",              # verbal fluency
+  "bta_total",                                   # attention
+  "sdmt_correct",                                # processing speed
+  "tmt_a_inv", "tmt_b_inv",                     # exec speed (inverted)
+  "wcst_cat",                                    # executive function
+  "stroop_pc_calc"                               # exec attention
+)
+
+predictors_fixed <- c(
+  "edad", "educacion", "genero", "dom_L1L2", "acculturation_total"
+)
+
+sociodem_descriptive <- c(
+  "ID", "edad", "genero", "educacion", "bilingue",
+  "l1_proficiency", "l2_proficiency"
+)
+
+# ── Build df_analytic (VERSIÓN CORREGIDA) ──────────────────────────────────
+
+df_analytic <- df %>%
+  dplyr::select(all_of(unique(c(
+    sociodem_descriptive,
+    predictors_fixed,
+    primary_outcomes_13,
+    # Secondary / sensitivity variables:
+    "wcst_persev", "wcst_err", "wcst_persev_inv", "wcst_err_inv",
+    "hvlt_fp_rel", "hvlt_fp_norel", "hvlt_errores",
+    "stroop_interf", "sdmt_err", "tmt_a", "tmt_b",
+    "mmse", "phq9", "bartel"
+  ))))
+
+# ── Listwise-complete subset ────────────────────────────────────────────────
+df_complete <- df_analytic %>%
+  filter(if_all(
+    all_of(c(primary_outcomes_13, predictors_fixed)),
+    ~ !is.na(.x)
+  ))
+
+cat("N in df_analytic:", nrow(df_analytic), "\n")
+cat("N listwise complete (13 outcomes + 5 predictors):",
+    nrow(df_complete), "\n")
+```
+
+---
+
+# Save Analytic Objects {#save}
+
+```{r save}
+saveRDS(df_raw,      "df_raw.rds")
+saveRDS(df,          "df_full.rds")
+saveRDS(df_analytic, "df_analytic.rds")
+saveRDS(df_complete, "df_complete.rds")
+
+saveRDS(
+  list(
+    primary_outcomes_13 = primary_outcomes_13,
+    predictors_fixed    = predictors_fixed,
+    ac_items            = ac_items,
+    pi_vars             = pi_vars,
+    si_vars             = si_vars
+  ),
+  file = "vars_lookup.rds"
+)
+
+cat("Objects saved to working directory:\n")
+cat("  df_raw.rds, df_full.rds, df_analytic.rds,",
+    "df_complete.rds, vars_lookup.rds\n")
+```
+
+---
+
+# Verification Summary {#summary}
+
+## Sample characteristics
+
+```{r summary-sociodem}
+df_analytic %>%
+  summarise(
+    `N`                = as.character(n()),
+    `Age M (SD)`       = paste0(round(mean(edad), 1), " (",
+                                round(sd(edad), 1), ")"),
+    `Age range`        = paste0(min(edad), "–", max(edad)),
+    `Education M (SD)` = paste0(round(mean(educacion), 1), " (",
+                                round(sd(educacion), 1), ")"),
+    `Males n (%)`      = paste0(sum(genero == "Male"), " (",
+                                round(100 * mean(genero == "Male"), 1), "%)"),
+    `Females n (%)`    = paste0(sum(genero == "Female"), " (",
+                                round(100 * mean(genero == "Female"), 1), "%)")
+  ) %>%
+  tidyr::pivot_longer(everything(), names_to = "Statistic",
+                      values_to = "Value") %>%
+  kable(caption = "Sample Characteristics (N = 88)") %>%
+  kable_styling(bootstrap_options = c("striped", "condensed"),
+                full_width = FALSE)
+```
+
+## Constructed predictors
+
+```{r summary-predictors}
+df_analytic %>%
+  dplyr::select(all_of(c("acculturation_total", "dom_L1L2",
+                         "l1_proficiency", "l2_proficiency"))) %>%
+  tidyr::pivot_longer(everything(), names_to = "Variable",
+                      values_to = "Value") %>%
+  group_by(Variable) %>%
+  summarise(
+    N    = sum(!is.na(Value)),
+    Mean = round(mean(Value, na.rm = TRUE), 2),
+    SD   = round(sd(Value, na.rm = TRUE), 2),
+    Min  = round(min(Value, na.rm = TRUE), 2),
+    Max  = round(max(Value, na.rm = TRUE), 2),
+    .groups = "drop"
+  ) %>%
+  kable(caption = "Constructed Predictors — Descriptive Summary") %>%
+  kable_styling(bootstrap_options = c("striped", "condensed"),
+                full_width = FALSE)
+```
+
+## 13 primary outcomes (higher = better for all)
+
+```{r summary-outcomes}
+# Opción 1: Especificar namespace explícitamente
+df_analytic %>%
+  dplyr::select(all_of(primary_outcomes_13)) %>%
+  tidyr::pivot_longer(everything(), names_to = "Variable",
+                      values_to = "Value") %>%
+  group_by(Variable) %>%
+  summarise(
+    N    = sum(!is.na(Value)),
+    Mean = round(mean(Value, na.rm = TRUE), 2),
+    SD   = round(sd(Value, na.rm = TRUE), 2),
+    Min  = round(min(Value, na.rm = TRUE), 2),
+    Max  = round(max(Value, na.rm = TRUE), 2),
+    .groups = "drop"
+  ) %>%
+  kable(caption = "13 Primary Outcomes — Range Check") %>%
+  kable_styling(bootstrap_options = c("striped", "condensed"),
+                full_width = FALSE)
+```
+
+## Missing data check (expected = 0 for all analytic variables)
+
+```{r na-check}
+.na_tbl <- df_analytic %>%
+  dplyr::select(all_of(c(primary_outcomes_13, predictors_fixed))) %>%
+  dplyr::summarise(across(everything(), ~ sum(is.na(.x)))) %>%
+  tidyr::pivot_longer(everything(),
+                      names_to  = "Variable",
+                      values_to = "N_missing")
+
+kable(.na_tbl,
+      caption = "Missing Data in 13 Outcomes + 5 Predictors (expected: all 0)") %>%
+  kable_styling(bootstrap_options = c("striped", "condensed"),
+                full_width = FALSE) %>%
+  row_spec(which(.na_tbl$N_missing > 0), background = "#ffe4e4")
+```
+
+```{r}
+# =============================================================================
+# AJUSTE DE ACULTURACIÓN
+# =============================================================================
+# Objetivo: (a) Recodificar AC_Religion de escala 2-6 a 1-5
+#           (b) Invertir 9 ítems (8 lenguaje + 1 rituales) para alinear 
+#               dirección "mayor = más aculturación"
+#           (c) Calcular acculturation_mean (promedio 1-5)
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# 1. RECODIFICACIÓN AC_RELIGION (2-6 → 1-5)
+# -----------------------------------------------------------------------------
+# Escala original: 1=No religioso (eliminado/corregido), 2=Solo Embera, ..., 
+# 6=Solo católica/cristiana/otra
+# Escala nueva: 1=Solo Embera, ..., 5=Solo católica/cristiana/otra
+
+df <- df %>%
+  mutate(
+    AC_Religion_recod = case_when(
+      AC_Religion == 2 ~ 1,
+      AC_Religion == 3 ~ 2,
+      AC_Religion == 4 ~ 3,
+      AC_Religion == 5 ~ 4,
+      AC_Religion == 6 ~ 5,
+      TRUE ~ NA_real_  # Captura cualquier valor inesperado como NA
+    )
+  )
+
+# Verificación: distribución antes y después
+cat("AC_Religion ANTES de recodificar:\n")
+print(table(df$AC_Religion, useNA = "always"))
+cat("\nAC_Religion DESPUÉS de recodificar (nueva escala 1-5):\n")
+print(table(df$AC_Religion_recod, useNA = "always"))
+cat("\n")
+
+# Chequeo de seguridad: confirmar que no hay NAs inesperados
+stopifnot(
+  "AC_Religion_recod tiene NAs no esperados" = sum(is.na(df$AC_Religion_recod)) == 0
+)
+
+# -----------------------------------------------------------------------------
+# 2. INVERSIÓN DE ÍTEMS (8 lenguaje + 1 rituales = 9 en total)
+# -----------------------------------------------------------------------------
+# Fórmula de inversión: nuevo = 6 - original (para escala Likert 1-5)
+# Esto voltea: 1↔5, 2↔4, 3↔3
+
+# Lista de los 8 ítems de lenguaje a invertir
+lang_items <- c(
+  "AC_Hablar", "AC_Leer", "AC_Escribir", "AC_Idioma_Infancia",
+  "AC_Idioma_casa", "AC_Idioma_trabajo", "AC_Idioma_amigos", 
+  "AC_Idioma_pensamiento"
+)
+
+# Invertir lenguaje
+df <- df %>%
+  mutate(across(all_of(lang_items), ~ 6 - .x, .names = "{.col}_inv"))
+
+# Invertir AC_Rituales
+df <- df %>%
+  mutate(AC_Rituales_inv = 6 - AC_Rituales)
+
+# Verificación rápida: mostrar un ítem original vs invertido
+cat("Verificación de inversión (ejemplo: AC_Hablar):\n")
+cat("Original → Invertido\n")
+print(table(Original = df$AC_Hablar, Invertido = df$AC_Hablar_inv))
+cat("\n")
+
+# -----------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
+# 3. CÁLCULO DE ACCULTURATION_MEAN (promedio 1-5)
+# -----------------------------------------------------------------------------
+# Componentes del promedio:
+#   - 8 ítems lenguaje invertidos: AC_Hablar_inv, ..., AC_Idioma_pensamiento_inv
+#   - 1 ítem rituales invertido: AC_Rituales_inv
+#   - 7 ítems en dirección original correcta: AC_Amigos_cercanos, AC_Fiestas, 
+#     AC_Visitas, AC_Amigos_hijos, AC_Religion_recod, AC_Vestimenta, AC_Se_considera
+
+# Nombres de variables invertidas (8 lenguaje + 1 rituales)
+inverted_vars <- paste0(lang_items, "_inv")
+inverted_vars <- c(inverted_vars, "AC_Rituales_inv")
+
+# Variables originales en dirección correcta (7)
+correct_direction_vars <- c(
+  "AC_Amigos_cercanos", "AC_Fiestas", "AC_Visitas", "AC_Amigos_hijos",
+  "AC_Religion_recod", "AC_Vestimenta", "AC_Se_considera"
+)
+
+# Vector completo de las 16 variables para el promedio
+acculturation_components <- c(inverted_vars, correct_direction_vars)
+
+cat("Componentes del índice de aculturación (16 ítems):\n")
+cat(paste(acculturation_components, collapse = "\n"), "\n\n")
+
+# Calcular promedio (rowMeans con na.rm=TRUE prorratea si hay algún NA)
+df <- df %>%
+  rowwise() %>%
+  mutate(
+    acculturation_mean = mean(c_across(all_of(acculturation_components)), 
+                              na.rm = TRUE)
+  ) %>%
+  ungroup()
+
+# -----------------------------------------------------------------------------
+# 4. VERIFICACIÓN FINAL
+# -----------------------------------------------------------------------------
+
+cat("========================================================================\n")
+cat("RESUMEN DE ACULTURACIÓN - acculturation_mean\n")
+cat("========================================================================\n")
+
+cat("Estadísticos descriptivos:\n")
+print(summary(df$acculturation_mean))
+
+cat("\nNA count:", sum(is.na(df$acculturation_mean)), "\n")
+cat("Min:", round(min(df$acculturation_mean, na.rm = TRUE), 3), "\n")
+cat("Max:", round(max(df$acculturation_mean, na.rm = TRUE), 3), "\n")
+cat("Mean:", round(mean(df$acculturation_mean, na.rm = TRUE), 3), "\n")
+cat("SD:", round(sd(df$acculturation_mean, na.rm = TRUE), 3), "\n")
+
+# Chequeo de rango esperado [1, 5]
+stopifnot(
+  "acculturation_mean fuera del rango esperado [1,5]" = 
+    min(df$acculturation_mean, na.rm = TRUE) >= 1 && 
+    max(df$acculturation_mean, na.rm = TRUE) <= 5
+)
+
+cat("\n✓ Rango verificado: [1, 5]\n")
+cat("✓ Dirección uniforme: mayor = más aculturación en los 16 ítems\n")
+cat("========================================================================\n\n")
+
+# -----------------------------------------------------------------------------
+# 5. COMPARACIÓN CON EL TOTAL ANTERIOR (opcional, para auditoría)
+# -----------------------------------------------------------------------------
+# Si en tu código anterior calculaste acculturation_total (suma 16-80),
+# podemos comparar para ver el efecto del ajuste. Si no existe, comenta esto.
+
+if ("acculturation_total" %in% names(df)) {
+  cat("Comparación con acculturation_total anterior (suma, escala 16-80):\n")
+  cat("Correlación Pearson entre total (suma) y mean (promedio):", 
+      round(cor(df$acculturation_total, df$acculturation_mean, 
+                use = "complete.obs"), 4), "\n")
+  cat("(Esperado: ~1.0 si solo cambia escala; <1.0 si hubo inversiones)\n\n")
+}
+
+# -----------------------------------------------------------------------------
+# 6. GUARDAR OBJETO ACTUALIZADO
+# -----------------------------------------------------------------------------
+
+if (exists("df_analytic")) {
+  # Eliminar acculturation_total si existe (sintaxis base R, 100% robusta)
+  if ("acculturation_total" %in% names(df_analytic)) {
+    df_analytic$acculturation_total <- NULL
+  }
+  
+  # Añadir acculturation_mean
+  df_analytic <- left_join(
+    df_analytic,
+    df[, c("ID", "acculturation_mean")],
+    by = "ID"
+  )
+  cat("df_analytic actualizado con acculturation_mean.\n")
+} else {
+  cat("df_analytic no existe en el entorno. Crea df_analytic primero o ajusta esta sección.\n")
+}
+
+cat("\nAJUSTE DE ACULTURACIÓN COMPLETADO.\n")
+```
+
+
+---
+
+# Session Information {#session}
+
+*Record for the Methods section of the manuscript.*
+
+```{r session}
+sessionInfo()
+```
+
+---
+
+> **Step 1 complete.**  
+> Objects available in session: `df_raw`, `df`, `df_analytic`, `df_complete`.  
+> Proceed to **Step 2** only after Carlos confirms this output.
+
+```{r}
+# Actualizar df_complete si existe
+if (exists("df_complete")) {
+  if ("acculturation_total" %in% names(df_complete)) {
+    df_complete$acculturation_total <- NULL
+  }
+  df_complete <- left_join(
+    df_complete,
+    df[, c("ID", "acculturation_mean")],
+    by = "ID"
+  )
+  cat("df_complete actualizado con acculturation_mean.\n")
+}
+
+# Actualizar vars_lookup si existe
+if (exists("predictors_fixed")) {
+  predictors_fixed <- c("edad", "educacion", "genero", "dom_L1L2", "acculturation_mean")
+  cat("predictors_fixed actualizado:\n")
+  print(predictors_fixed)
+  cat("\n")
+}
+
+# Guardar objetos actualizados
+saveRDS(df_analytic, "df_analytic.rds")
+saveRDS(df_complete, "df_complete.rds")
+saveRDS(
+  list(
+    primary_outcomes_13 = primary_outcomes_13,
+    predictors_fixed = predictors_fixed,
+    ac_items = ac_items,
+    pi_vars = pi_vars,
+    si_vars = si_vars
+  ),
+  file = "vars_lookup.rds"
+)
+
+cat("Objetos guardados: df_analytic.rds, df_complete.rds, vars_lookup.rds\n")
+cat("LISTO PARA PASO 2.\n")
+```
+
+```{r}
+# =============================================================================
+# PASO 2 — DESCRIPTIVOS | Bloque 1b: Lingüísticas y aculturación (CORRECTO)
+# =============================================================================
+
+# Proficiencia L1 (Embera)
+cat("PROFICIENCIA L1 (Embera, escala 1-5):\n")
+cat("  M =", round(mean(df_complete$l1_proficiency), 2), "\n")
+cat("  SD =", round(sd(df_complete$l1_proficiency), 2), "\n")
+cat("  Rango:", round(min(df_complete$l1_proficiency), 2), "–", 
+    round(max(df_complete$l1_proficiency), 2), "\n\n")
+
+# Proficiencia L2 (Español)
+cat("PROFICIENCIA L2 (Español, escala 1-5):\n")
+cat("  M =", round(mean(df_complete$l2_proficiency), 2), "\n")
+cat("  SD =", round(sd(df_complete$l2_proficiency), 2), "\n")
+cat("  Rango:", round(min(df_complete$l2_proficiency), 2), "–", 
+    round(max(df_complete$l2_proficiency), 2), "\n\n")
+
+# Dominancia L1/L2
+cat("DOMINANCIA L1/L2 (escala -4 a +4):\n")
+cat("  M =", round(mean(df_complete$dom_L1L2), 2), "\n")
+cat("  SD =", round(sd(df_complete$dom_L1L2), 2), "\n")
+cat("  Rango:", round(min(df_complete$dom_L1L2), 2), "–", 
+    round(max(df_complete$dom_L1L2), 2), "\n")
+cat("  Interpretación: valor positivo = dominancia Embera (L1 > L2)\n\n")
+
+# Aculturación (AHORA SÍ DEBE FUNCIONAR)
+cat("ACULTURACIÓN (promedio, escala 1-5):\n")
+cat("  M =", round(mean(df_complete$acculturation_mean), 2), "\n")
+cat("  SD =", round(sd(df_complete$acculturation_mean), 2), "\n")
+cat("  Rango:", round(min(df_complete$acculturation_mean), 2), "–", 
+    round(max(df_complete$acculturation_mean), 2), "\n\n")
+```
+
+```{r}
+# =============================================================================
+# PASO 2 — DESCRIPTIVOS | Bloque 1c: Cribados (MMSE, PHQ-9, Bartel)
+# =============================================================================
+
+# MMSE
+cat("MMSE (Mini-Mental State Examination):\n")
+cat("  M =", round(mean(df_complete$mmse, na.rm = TRUE), 1), "\n")
+cat("  SD =", round(sd(df_complete$mmse, na.rm = TRUE), 1), "\n")
+cat("  Rango:", min(df_complete$mmse, na.rm = TRUE), "–", 
+    max(df_complete$mmse, na.rm = TRUE), "\n\n")
+
+# PHQ-9
+cat("PHQ-9 (Patient Health Questionnaire-9):\n")
+cat("  M =", round(mean(df_complete$phq9, na.rm = TRUE), 1), "\n")
+cat("  SD =", round(sd(df_complete$phq9, na.rm = TRUE), 1), "\n")
+cat("  Rango:", min(df_complete$phq9, na.rm = TRUE), "–", 
+    max(df_complete$phq9, na.rm = TRUE), "\n\n")
+
+# Barthel
+cat("BARTHEL INDEX (Activities of Daily Living):\n")
+cat("  M =", round(mean(df_complete$bartel, na.rm = TRUE), 1), "\n")
+cat("  SD =", round(sd(df_complete$bartel, na.rm = TRUE), 1), "\n")
+cat("  Rango:", min(df_complete$bartel, na.rm = TRUE), "–", 
+    max(df_complete$bartel, na.rm = TRUE), "\n\n")
+```
+```{r}
+# =============================================================================
+# PASO 2 — DESCRIPTIVOS | Bloque 1d: TABLA 1 FORMATEADA
+# =============================================================================
+
+library(knitr)
+library(kableExtra)
+
+# Construir tabla con todos los valores confirmados
+tabla1 <- data.frame(
+  Characteristic = c(
+    "Age, years",
+    "  M (SD)",
+    "  Range",
+    "Education, years",
+    "  M (SD)",
+    "  Range",
+    "Sex, n (%)",
+    "  Male",
+    "  Female",
+    "Bilingualism (Embera-Spanish), n (%)",
+    "  Bilingual",
+    "L1 proficiency (Embera), 1–5 scale",
+    "  M (SD)",
+    "  Range",
+    "L2 proficiency (Spanish), 1–5 scale",
+    "  M (SD)",
+    "  Range",
+    "L1/L2 dominance index, −4 to +4",
+    "  M (SD)",
+    "  Range",
+    "Acculturation (mean), 1–5 scale",
+    "  M (SD)",
+    "  Range",
+    "MMSE total score",
+    "  M (SD)",
+    "PHQ-9 total score",
+    "  M (SD)",
+    "Barthel Index total score",
+    "  M (SD)"
+  ),
+  Value = c(
+    "",
+    "33.4 (12.3)",
+    "18–73",
+    "",
+    "5.9 (4.3)",
+    "0–19",
+    "",
+    "42 (47.7%)",
+    "46 (52.3%)",
+    "",
+    "88 (100.0%)",
+    "",
+    "4.09 (0.91)",
+    "2.00–5.00",
+    "",
+    "3.59 (1.07)",
+    "1.00–5.00",
+    "",
+    "0.50 (1.25)",
+    "−2.50–3.50",
+    "",
+    "2.42 (0.62)",
+    "1.00–3.56",
+    "",
+    "26.2 (2.5)",
+    "",
+    "3.0 (2.6)",
+    "",
+    "99.9 (0.5)"
+  ),
+  stringsAsFactors = FALSE
+)
+
+# Renderizar tabla
+cat("========================================================================\n")
+cat("TABLE 1\n")
+cat("Sociodemographic and Clinical Characteristics of the Sample (N = 88)\n")
+cat("========================================================================\n\n")
+
+kable(tabla1, 
+      col.names = c("Characteristic", "Value"),
+      align = c("l", "r"),
+      format = "simple") %>%
+  print()
+
+cat("\n========================================================================\n")
+cat("Nota: L1 = first language (Embera); L2 = second language (Spanish).\n")
+cat("L1/L2 dominance index: positive values indicate L1 dominance.\n")
+cat("MMSE = Mini-Mental State Examination; PHQ-9 = Patient Health\n")
+cat("Questionnaire-9; Barthel Index = Activities of Daily Living.\n")
+cat("========================================================================\n")
+```
+
+```{r}
+# =============================================================================
+# PASO 2 — DESCRIPTIVOS | Bloque 2: TABLA 2 — Rendimiento neuropsicológico
+# =============================================================================
+
+library(psych)
+library(dplyr)
+
+# Vector de los 13 indicadores primarios (del brief)
+primary_outcomes_13 <- c(
+  "hvlt_total", "hvlt_tardia", "hvlt_recon",      # Memoria verbal
+  "rey_memoria", "rey_copia",                     # Visoespacial
+  "flu_fon_total", "flu_sem_total",               # Fluidez
+  "bta_total",                                    # Atención
+  "sdmt_correct",                                 # Velocidad procesamiento
+  "tmt_a_inv", "tmt_b_inv",                       # Velocidad/Ejecutiva (invertidos)
+  "wcst_cat",                                     # Función ejecutiva
+  "stroop_pc_calc"                                # Atención ejecutiva
+)
+
+# Calcular descriptivos completos con psych::describe()
+desc_neuro <- psych::describe(df_complete[, primary_outcomes_13])
+
+# Mostrar tabla completa
+cat("========================================================================\n")
+cat("TABLA 2 — Neuropsychological Performance (N = 88)\n")
+cat("Descriptive Statistics for 13 Primary Indicators\n")
+cat("========================================================================\n\n")
+
+print(desc_neuro, digits = 2)
+
+cat("\n========================================================================\n")
+cat("Columnas: n, mean, sd, median, trimmed, mad, min, max, range, skew, kurtosis, se\n")
+cat("Nota: Todos los indicadores están en dirección 'mayor = mejor rendimiento'\n")
+cat("      (tmt_a_inv y tmt_b_inv son tiempos invertidos con signo negativo)\n")
+cat("========================================================================\n")
+```
+
+```{r}
+# =============================================================================
+# PASO 2 — DESCRIPTIVOS | Bloque 3: Diferencias por género
+# =============================================================================
+
+library(dplyr)
+
+cat("========================================================================\n")
+cat("COMPARACIONES POR GÉNERO (Mann-Whitney U test)\n")
+cat("========================================================================\n\n")
+
+# Función helper para Mann-Whitney + efecto tamaño
+comparar_genero <- function(var_name, data) {
+  male <- data %>% filter(genero == "Male") %>% pull(!!sym(var_name))
+  female <- data %>% filter(genero == "Female") %>% pull(!!sym(var_name))
+  
+  # Mann-Whitney U test
+  test <- wilcox.test(male, female, exact = FALSE)
+  
+  # Medias por grupo
+  m_male <- mean(male, na.rm = TRUE)
+  m_female <- mean(female, na.rm = TRUE)
+  
+  # r de efecto (Z / sqrt(N))
+  z <- qnorm(test$p.value / 2)
+  r <- abs(z) / sqrt(length(male) + length(female))
+  
+  return(data.frame(
+    Variable = var_name,
+    Male_M = round(m_male, 2),
+    Female_M = round(m_female, 2),
+    U = round(test$statistic, 0),
+    p = round(test$p.value, 3),
+    r = round(r, 3)
+  ))
+}
+
+# Comparar las 13 variables neuropsicológicas
+resultados_genero <- bind_rows(
+  lapply(primary_outcomes_13, comparar_genero, data = df_complete)
+)
+
+print(resultados_genero)
+
+cat("\n--- Sociodemográficas y lingüísticas ---\n")
+cat("\nEdad:\n")
+print(comparar_genero("edad", df_complete))
+
+cat("\nEducación:\n")
+print(comparar_genero("educacion", df_complete))
+
+cat("\nDominancia L1/L2:\n")
+print(comparar_genero("dom_L1L2", df_complete))
+
+cat("\nAculturación:\n")
+print(comparar_genero("acculturation_mean", df_complete))
+
+cat("\n========================================================================\n")
+cat("Nota: p < .05 indica diferencia significativa.\n")
+cat("r = tamaño del efecto (0.1=pequeño, 0.3=mediano, 0.5=grande).\n")
+cat("========================================================================\n")
+```
+```{r}
+# =============================================================================
+# PASO 2 — DESCRIPTIVOS | Bloque 4: Correlaciones con edad y escolaridad
+# =============================================================================
+
+library(Hmisc)  # Para rcorr con Spearman
+
+cat("========================================================================\n")
+cat("CORRELACIONES BIVARIADAS (Spearman) CON EDAD Y ESCOLARIDAD\n")
+cat("========================================================================\n\n")
+
+# Seleccionar variables para correlación
+vars_corr <- df_complete[, c("edad", "educacion", primary_outcomes_13)]
+
+# Matriz de correlación Spearman
+cor_matrix <- rcorr(as.matrix(vars_corr), type = "spearman")
+
+# Extraer correlaciones con edad
+cat("--- Correlaciones con EDAD ---\n")
+cor_edad <- data.frame(
+  Variable = primary_outcomes_13,
+  rho = round(cor_matrix$r["edad", primary_outcomes_13], 3),
+  p = round(cor_matrix$P["edad", primary_outcomes_13], 3)
+)
+print(cor_edad, row.names = FALSE)
+
+cat("\n--- Correlaciones con EDUCACIÓN ---\n")
+cor_educ <- data.frame(
+  Variable = primary_outcomes_13,
+  rho = round(cor_matrix$r["educacion", primary_outcomes_13], 3),
+  p = round(cor_matrix$P["educacion", primary_outcomes_13], 3)
+)
+print(cor_educ, row.names = FALSE)
+
+cat("\n========================================================================\n")
+cat("Nota: rho = coeficiente de correlación Spearman.\n")
+cat("p < .05 indica correlación significativa.\n")
+cat("Valores absolutos: |rho| < 0.3 = débil, 0.3-0.5 = moderada, > 0.5 = fuerte.\n")
+cat("========================================================================\n")
+```
+
+```{r}
+# =============================================================================
+# PASO 3 — ANÁLISIS CORRELACIONAL | Bloque 5a: Matriz Spearman
+# =============================================================================
+
+library(Hmisc)
+library(corrplot)
+
+cat("========================================================================\n")
+cat("PASO 3 — MATRIZ DE CORRELACIONES ENTRE 13 INDICADORES PRIMARIOS\n")
+cat("========================================================================\n\n")
+
+# Matriz de correlación Spearman entre los 13 indicadores
+cor_13 <- rcorr(as.matrix(df_complete[, primary_outcomes_13]), type = "spearman")
+
+# Mostrar matriz de correlaciones
+cat("--- MATRIZ DE CORRELACIONES (Spearman rho) ---\n\n")
+print(round(cor_13$r, 3))
+
+cat("\n--- MATRIZ DE p-values ---\n\n")
+print(round(cor_13$P, 3))
+
+# Estadísticos de la matriz (triangular superior, sin diagonal)
+triangulo_sup <- cor_13$r[upper.tri(cor_13$r)]
+
+cat("\n========================================================================\n")
+cat("ESTADÍSTICOS DE LA MATRIZ DE CORRELACIONES\n")
+cat("========================================================================\n")
+cat("N total de pares:", length(triangulo_sup), 
+    "(13 variables × 12 / 2 = 78 pares)\n")
+cat("Mediana rho:", round(median(triangulo_sup), 3), "\n")
+cat("Rango rho:", round(min(triangulo_sup), 3), "–", 
+    round(max(triangulo_sup), 3), "\n")
+cat("% pares con rho ≥ .30:", 
+    round(100 * mean(triangulo_sup >= 0.30), 1), "%\n")
+cat("% pares con rho ≥ .50:", 
+    round(100 * mean(triangulo_sup >= 0.50), 1), "%\n")
+cat("% pares con rho ≥ .70:", 
+    round(100 * mean(triangulo_sup >= 0.70), 1), "%\n")
+cat("========================================================================\n\n")
+
+# Identificar las 10 correlaciones más fuertes
+cor_matriz_long <- data.frame(
+  Var1 = rep(rownames(cor_13$r), each = ncol(cor_13$r)),
+  Var2 = rep(colnames(cor_13$r), times = nrow(cor_13$r)),
+  rho = as.vector(cor_13$r),
+  p = as.vector(cor_13$P)
+)
+
+# Filtrar diagonal y duplicados (mantener solo triángulo superior)
+cor_matriz_long <- cor_matriz_long %>%
+  filter(Var1 != Var2) %>%
+  mutate(pair = paste(pmin(Var1, Var2), pmax(Var1, Var2), sep = " - ")) %>%
+  distinct(pair, .keep_all = TRUE) %>%
+  arrange(desc(abs(rho)))
+
+cat("--- 10 CORRELACIONES MÁS FUERTES ---\n")
+print(cor_matriz_long[1:10, c("Var1", "Var2", "rho", "p")], row.names = FALSE)
+
+cat("\n========================================================================\n")
+```
+
+```{r}
+# =============================================================================
+# PASO 3 | Bloque 5b: HEATMAP + DENDROGRAMA (Figura 1)
+# =============================================================================
+
+library(corrplot)
+library(RColorBrewer)
+
+# Etiquetas más cortas para la figura
+nombres_cortos <- c(
+  "HVLT Total", "HVLT Delayed", "HVLT Recog",
+  "Rey Memory", "Rey Copy",
+  "Phon Fluency", "Sem Fluency",
+  "BTA Total",
+  "SDMT",
+  "TMT-A", "TMT-B",
+  "WCST Cat",
+  "Stroop PC"
+)
+
+# Renombrar filas/columnas de la matriz
+cor_matriz_fig <- cor_13$r
+rownames(cor_matriz_fig) <- nombres_cortos
+colnames(cor_matriz_fig) <- nombres_cortos
+
+# Generar heatmap con dendrograma jerárquico
+cat("Generando Figura 1: Heatmap + Dendrograma...\n")
+cat("(La figura se mostrará en ventana de gráficos)\n\n")
+
+# Configurar ventana gráfica
+par(mfrow = c(1,1), mar = c(1, 1, 3, 1))
+
+# Heatmap + dendrograma (método Ward, distancia euclidiana)
+corrplot(cor_matriz_fig, 
+         method = "color",
+         type = "full",
+         order = "hclust",           # Clustering jerárquico
+         hclust.method = "ward.D2",  # Método Ward
+         addrect = 3,                # Rectángulos alrededor de 3 clusters
+         col = brewer.pal(n = 9, name = "RdYlBu"),
+         addCoef.col = "black",      # Añadir coeficientes en negro
+         number.cex = 0.6,           # Tamaño de los números
+         tl.col = "black",           # Color de etiquetas
+         tl.srt = 45,                # Rotación de etiquetas
+         tl.cex = 0.8,               # Tamaño de etiquetas
+         title = "Figure 1. Correlation Matrix (Spearman) with Hierarchical Clustering",
+         mar = c(0, 0, 2, 0))
+
+cat("Figura 1 generada. Revisa la ventana de gráficos.\n")
+cat("Para guardar: click derecho > 'Save as...' o usar código adicional.\n\n")
+
+cat("========================================================================\n")
+cat("PASO 3 COMPLETADO\n")
+cat("========================================================================\n")
+```
+
+```{r}
+# Guardar como PNG de alta resolución (600 dpi, publication-quality)
+png("Figure1_Correlation_Heatmap.png", width = 3000, height = 3000, res = 300)
+corrplot(cor_matriz_fig, 
+         method = "color", type = "full", order = "hclust",
+         hclust.method = "ward.D2", addrect = 3,
+         col = brewer.pal(n = 9, name = "RdYlBu"),
+         addCoef.col = "black", number.cex = 0.6,
+         tl.col = "black", tl.srt = 45, tl.cex = 0.8,
+         title = "Figure 1. Correlation Matrix (Spearman) with Hierarchical Clustering",
+         mar = c(0, 0, 2, 0))
+dev.off()
+
+cat("Figura guardada como Figure1_Correlation_Heatmap.png en el directorio de trabajo.\n")
+```
+
+```{r}
+# =============================================================================
+# PASO 4 — REGRESIONES MÚLTIPLES | Bloque 6a: Diagnóstico VIF
+# =============================================================================
+
+library(car)  # Para VIF
+
+cat("========================================================================\n")
+cat("PASO 4 — REGRESIONES MÚLTIPLES\n")
+cat("Bloque 6a: Diagnóstico de multicolinealidad (VIF)\n")
+cat("========================================================================\n\n")
+
+# Modelo auxiliar para calcular VIF (usamos un outcome cualquiera)
+# Solo nos interesa el VIF de los predictores entre sí
+modelo_vif <- lm(hvlt_total ~ edad + educacion + genero + dom_L1L2 + acculturation_mean,
+                 data = df_complete)
+
+# Calcular VIF
+vif_valores <- vif(modelo_vif)
+
+cat("--- Factor de Inflación de la Varianza (VIF) ---\n\n")
+print(vif_valores)
+
+cat("\n--- Interpretación ---\n")
+cat("VIF < 5: multicolinealidad aceptable\n")
+cat("VIF 5-10: multicolinealidad moderada (precaución)\n")
+cat("VIF > 10: multicolinealidad severa (requiere acción)\n\n")
+
+# Identificar VIF problemáticos
+if (any(vif_valores > 5)) {
+  cat("⚠ ADVERTENCIA: Detectados VIF > 5:\n")
+  print(vif_valores[vif_valores > 5])
+  cat("\nSi edad y educacion tienen VIF > 5, seguir plan del brief:\n")
+  cat("  - Modelos alternativos excluyendo cada uno\n")
+  cat("  - Reportar ambos en supplementary\n\n")
+} else {
+  cat("✓ Todos los VIF < 5. Multicolinealidad aceptable.\n")
+  cat("  Proceder con los 5 predictores en todos los modelos.\n\n")
+}
+
+# Correlación entre edad y educación (para contexto)
+cat("--- Correlación edad-educación (Pearson) ---\n")
+cor_edad_educ <- cor.test(df_complete$edad, df_complete$educacion)
+cat("r =", round(cor_edad_educ$estimate, 3), 
+    ", p =", round(cor_edad_educ$p.value, 3), "\n")
+
+cat("\n========================================================================\n")
+```
+
+```{r}
+# Bloque 6b: Modelo de ejemplo con diagnósticos completos
+
+library(lmtest)  # Para Breusch-Pagan test
+library(lm.beta)  # Para betas estandarizados
+
+# Ajustar modelo de ejemplo (HVLT Total)
+modelo_hvlt <- lm(hvlt_total ~ edad + educacion + genero + dom_L1L2 + acculturation_mean,
+                  data = df_complete)
+
+# Resumen del modelo
+cat("Modelo de ejemplo: hvlt_total ~ predictores\n\n")
+summary(modelo_hvlt)
+
+# Diagnóstico 1: Normalidad de residuales (Shapiro-Wilk)
+cat("\n--- Diagnóstico 1: Normalidad de residuales ---\n")
+shapiro_test <- shapiro.test(residuals(modelo_hvlt))
+cat("Shapiro-Wilk: W =", round(shapiro_test$statistic, 3), 
+    ", p =", round(shapiro_test$p.value, 3), "\n")
+if (shapiro_test$p.value < 0.05) {
+  cat("  Residuales NO normales (p < 0.05). Considerar bootstrap.\n")
+} else {
+  cat("  Residuales normales (p >= 0.05). Supuesto cumplido.\n")
+}
+
+# Diagnóstico 2: Homocedasticidad (Breusch-Pagan)
+cat("\n--- Diagnóstico 2: Homocedasticidad ---\n")
+bp_test <- bptest(modelo_hvlt)
+cat("Breusch-Pagan: BP =", round(bp_test$statistic, 3), 
+    ", p =", round(bp_test$p.value, 3), "\n")
+if (bp_test$p.value < 0.05) {
+  cat("  Heterocedasticidad detectada (p < 0.05). Considerar bootstrap o HC3.\n")
+} else {
+  cat("  Homocedasticidad cumplida (p >= 0.05).\n")
+}
+
+# Betas estandarizados
+cat("\n--- Coeficientes estandarizados ---\n")
+betas_std <- lm.beta(modelo_hvlt)
+print(summary(betas_std))
+
+# R² y R² ajustado
+cat("\nR² =", round(summary(modelo_hvlt)$r.squared, 3))
+cat(", R² ajustado =", round(summary(modelo_hvlt)$adj.r.squared, 3), "\n")
+
+# Tamaño del efecto f² de Cohen
+f2 <- summary(modelo_hvlt)$r.squared / (1 - summary(modelo_hvlt)$r.squared)
+cat("f² de Cohen =", round(f2, 3))
+
+if (f2 < 0.02) {
+  cat(" (efecto pequeño)\n")
+} else if (f2 < 0.15) {
+  cat(" (efecto pequeño-mediano)\n")
+} else if (f2 < 0.35) {
+  cat(" (efecto mediano)\n")
+} else {
+  cat(" (efecto grande)\n")
+}
+```
+
+```{r}
+# Bloque 6c: Ajustar los 13 modelos
+
+outcomes <- c("hvlt_total", "hvlt_tardia", "hvlt_recon",
+              "rey_memoria", "rey_copia", 
+              "flu_fon_total", "flu_sem_total",
+              "bta_total", "sdmt_correct",
+              "tmt_a_inv", "tmt_b_inv",
+              "wcst_cat", "stroop_pc_calc")
+
+predictores <- "edad + educacion + genero + dom_L1L2 + acculturation_mean"
+
+modelos_lista <- list()
+resultados_lista <- list()
+
+cat("Ajustando 13 modelos de regresión...\n\n")
+
+for (i in seq_along(outcomes)) {
+  outcome_actual <- outcomes[i]
+  formula_actual <- as.formula(paste(outcome_actual, "~", predictores))
+  
+  modelo <- lm(formula_actual, data = df_complete)
+  modelos_lista[[outcome_actual]] <- modelo
+  
+  # Extraer resultados clave
+  coefs <- summary(modelo)$coefficients
+  r2 <- summary(modelo)$r.squared
+  r2_adj <- summary(modelo)$adj.r.squared
+  f2 <- r2 / (1 - r2)
+  
+  # Betas estandarizados
+  modelo_std <- lm.beta(modelo)
+  betas_std <- coef(modelo_std)[-1]  # Excluir intercepto
+  
+  # Guardar resultados
+  resultados_lista[[outcome_actual]] <- list(
+    modelo = modelo,
+    coefs = coefs,
+    betas_std = betas_std,
+    r2 = r2,
+    r2_adj = r2_adj,
+    f2 = f2
+  )
+  
+  cat(i, ". ", outcome_actual, ": R² = ", round(r2, 3), 
+      ", R² adj = ", round(r2_adj, 3), ", f² = ", round(f2, 3), "\n", sep = "")
+}
+
+cat("\nTodos los modelos ajustados y guardados en 'resultados_lista'.\n")
+```
+```{r}
+# Bloque 6d: Consolidar resultados en Tabla 4
+
+library(broom)
+
+tabla4_lista <- list()
+
+for (outcome in outcomes) {
+  res <- resultados_lista[[outcome]]
+  modelo <- res$modelo
+  
+  # Extraer coeficientes con IC95%
+  tidy_modelo <- tidy(modelo, conf.int = TRUE, conf.level = 0.95)
+  tidy_modelo <- tidy_modelo[-1, ]  # Excluir intercepto
+  
+  # Añadir betas estandarizados
+  tidy_modelo$beta_std <- res$betas_std
+  
+  # Seleccionar columnas relevantes
+  tidy_modelo <- tidy_modelo[, c("term", "estimate", "beta_std", "conf.low", 
+                                  "conf.high", "std.error", "statistic", "p.value")]
+  
+  # Añadir info del modelo
+  tidy_modelo$outcome <- outcome
+  tidy_modelo$r2_adj <- res$r2_adj
+  tidy_modelo$f2 <- res$f2
+  
+  tabla4_lista[[outcome]] <- tidy_modelo
+}
+
+# Combinar todos los resultados
+tabla4_completa <- do.call(rbind, tabla4_lista)
+rownames(tabla4_completa) <- NULL
+
+# Ver primeras filas
+cat("Tabla 4: Resultados de los 13 modelos de regresión\n")
+cat("(Mostrando primeras 20 filas)\n\n")
+print(head(tabla4_completa, 20))
+
+cat("\n\nDimensiones de Tabla 4:", nrow(tabla4_completa), "filas ×", 
+    ncol(tabla4_completa), "columnas\n")
+cat("(13 outcomes × 5 predictores = 65 filas)\n\n")
+
+# Guardar tabla completa como CSV
+write.csv(tabla4_completa, "Tabla4_Regresiones_Completa.csv", row.names = FALSE)
+cat("Tabla guardada como 'Tabla4_Regresiones_Completa.csv'\n")
+```
+
+```{r}
+# Bloque 6e: Tablas formateadas (versión simplificada)
+
+library(dplyr)
+
+# Versión 1: Tabla compacta para manuscrito
+
+# Crear columnas formateadas
+tabla4_compacta <- tabla4_completa
+tabla4_compacta$beta_std_str <- sprintf("%.2f", tabla4_compacta$beta_std)
+tabla4_compacta$p_str <- ifelse(tabla4_compacta$p.value < 0.001, "<.001***",
+                         ifelse(tabla4_compacta$p.value < 0.01, 
+                                paste0(sprintf("%.3f", tabla4_compacta$p.value), "**"),
+                         ifelse(tabla4_compacta$p.value < 0.05, 
+                                paste0(sprintf("%.3f", tabla4_compacta$p.value), "*"),
+                         ifelse(tabla4_compacta$p.value < 0.10, 
+                                paste0(sprintf("%.3f", tabla4_compacta$p.value), "†"),
+                                sprintf("%.3f", tabla4_compacta$p.value)))))
+
+tabla4_compacta$predictor <- ifelse(tabla4_compacta$term == "edad", "Age",
+                             ifelse(tabla4_compacta$term == "educacion", "Education",
+                             ifelse(tabla4_compacta$term == "generoFemale", "Gender(F)",
+                             ifelse(tabla4_compacta$term == "dom_L1L2", "L1L2dom",
+                                    "Acculturation"))))
+
+# Seleccionar columnas
+tabla4_compacta <- tabla4_compacta[, c("outcome", "predictor", "beta_std_str", "p_str", "r2_adj", "f2")]
+
+# Mostrar primeras filas
+cat("Tabla 4 Compacta (primeras 20 filas):\n\n")
+print(head(tabla4_compacta, 20))
+
+# Guardar
+write.csv(tabla4_compacta, "Tabla4_Manuscrito_Compacta.csv", row.names = FALSE)
+cat("\nTabla guardada.\n\n")
+
+# Resumen de predictores significativos
+cat("============================================================\n")
+cat("RESUMEN: Predictores significativos por outcome\n")
+cat("============================================================\n\n")
+
+for (outcome_name in outcomes) {
+  datos_outcome <- tabla4_completa[tabla4_completa$outcome == outcome_name, ]
+  sig <- datos_outcome[datos_outcome$p.value < 0.05, ]
+  marg <- datos_outcome[datos_outcome$p.value >= 0.05 & datos_outcome$p.value < 0.10, ]
+  
+  cat(outcome_name, ":\n")
+  if (nrow(sig) > 0) {
+    cat("  Significativos (p < .05):\n")
+    for (i in 1:nrow(sig)) {
+      cat("    -", sig$term[i], ": β =", round(sig$beta_std[i], 3), 
+          ", p =", round(sig$p.value[i], 4), "\n")
+    }
+  }
+  if (nrow(marg) > 0) {
+    cat("  Marginales (.05 ≤ p < .10):\n")
+    for (i in 1:nrow(marg)) {
+      cat("    -", marg$term[i], ": β =", round(marg$beta_std[i], 3), 
+          ", p =", round(marg$p.value[i], 4), "\n")
+    }
+  }
+  if (nrow(sig) == 0 & nrow(marg) == 0) {
+    cat("  Ninguno significativo\n")
+  }
+  cat("\n")
+}
+```
+
+```{r}
+# Bloque 6f: Tabla 4 formato ancho para manuscrito
+
+# Crear versión wide (ancha) de la tabla
+# Outcomes en filas, predictores en columnas
+
+# Paso 1: Crear etiquetas limpias para outcomes
+outcome_labels <- c(
+  "hvlt_total" = "HVLT Total Recall",
+  "hvlt_tardia" = "HVLT Delayed Recall",
+  "hvlt_recon" = "HVLT Recognition",
+  "rey_memoria" = "Rey Figure Recall",
+  "rey_copia" = "Rey Figure Copy",
+  "flu_fon_total" = "Phonological Fluency",
+  "flu_sem_total" = "Semantic Fluency",
+  "bta_total" = "Brief Test of Attention",
+  "sdmt_correct" = "Symbol Digit Modalities",
+  "tmt_a_inv" = "Trail Making Test A",
+  "tmt_b_inv" = "Trail Making Test B",
+  "wcst_cat" = "Wisconsin Card Sorting",
+  "stroop_pc_calc" = "Stroop Color-Word"
+)
+
+# Paso 2: Construir tabla ancha manualmente
+tabla4_wide <- data.frame(
+  Outcome = character(),
+  Age_beta = numeric(),
+  Age_p = character(),
+  Educ_beta = numeric(),
+  Educ_p = character(),
+  Gender_beta = numeric(),
+  Gender_p = character(),
+  L1L2_beta = numeric(),
+  L1L2_p = character(),
+  Accult_beta = numeric(),
+  Accult_p = character(),
+  R2_adj = numeric(),
+  f2 = numeric(),
+  stringsAsFactors = FALSE
+)
+
+for (i in 1:length(outcomes)) {
+  outcome_name <- outcomes[i]
+  datos <- tabla4_completa[tabla4_completa$outcome == outcome_name, ]
+  
+  # Extraer valores para cada predictor
+  edad_row <- datos[datos$term == "edad", ]
+  educ_row <- datos[datos$term == "educacion", ]
+  gen_row <- datos[datos$term == "generoFemale", ]
+  l1l2_row <- datos[datos$term == "dom_L1L2", ]
+  accult_row <- datos[datos$term == "acculturation_mean", ]
+  
+  # Función para formatear p-values con asteriscos
+  format_p <- function(p) {
+    if (p < 0.001) return("<.001***")
+    else if (p < 0.01) return(paste0(sprintf("%.3f", p), "**"))
+    else if (p < 0.05) return(paste0(sprintf("%.3f", p), "*"))
+    else if (p < 0.10) return(paste0(sprintf("%.3f", p), "†"))
+    else return(sprintf("%.3f", p))
+  }
+  
+  # Construir fila
+  nueva_fila <- data.frame(
+    Outcome = outcome_labels[outcome_name],
+    Age_beta = round(edad_row$beta_std, 2),
+    Age_p = format_p(edad_row$p.value),
+    Educ_beta = round(educ_row$beta_std, 2),
+    Educ_p = format_p(educ_row$p.value),
+    Gender_beta = round(gen_row$beta_std, 2),
+    Gender_p = format_p(gen_row$p.value),
+    L1L2_beta = round(l1l2_row$beta_std, 2),
+    L1L2_p = format_p(l1l2_row$p.value),
+    Accult_beta = round(accult_row$beta_std, 2),
+    Accult_p = format_p(accult_row$p.value),
+    R2_adj = round(datos$r2_adj[1], 3),
+    f2 = round(datos$f2[1], 3),
+    stringsAsFactors = FALSE
+  )
+  
+  tabla4_wide <- rbind(tabla4_wide, nueva_fila)
+}
+
+# Mostrar tabla completa
+cat("=================================================================\n")
+cat("TABLA 4 (FORMATO MANUSCRITO) - Multiple Regression Results\n")
+cat("=================================================================\n\n")
+cat("Standardized β coefficients with p-values\n")
+cat("*** p < .001, ** p < .01, * p < .05, † p < .10\n\n")
+
+print(tabla4_wide, row.names = FALSE)
+
+# Guardar versión CSV
+write.csv(tabla4_wide, "Tabla4_Wide_Manuscrito.csv", row.names = FALSE)
+cat("\n\nTabla guardada como 'Tabla4_Wide_Manuscrito.csv'\n\n")
+
+# Versión COMPACTA: combinar β y p en una sola celda
+tabla4_compact <- data.frame(
+  Outcome = tabla4_wide$Outcome,
+  Age = paste0(tabla4_wide$Age_beta, " (", tabla4_wide$Age_p, ")"),
+  Education = paste0(tabla4_wide$Educ_beta, " (", tabla4_wide$Educ_p, ")"),
+  Gender = paste0(tabla4_wide$Gender_beta, " (", tabla4_wide$Gender_p, ")"),
+  L1L2_Dominance = paste0(tabla4_wide$L1L2_beta, " (", tabla4_wide$L1L2_p, ")"),
+  Acculturation = paste0(tabla4_wide$Accult_beta, " (", tabla4_wide$Accult_p, ")"),
+  R2_adj = tabla4_wide$R2_adj,
+  f2_Cohen = tabla4_wide$f2
+)
+
+cat("\n=================================================================\n")
+cat("TABLA 4 COMPACTA - β (p-value) format\n")
+cat("=================================================================\n\n")
+print(tabla4_compact, row.names = FALSE)
+
+write.csv(tabla4_compact, "Tabla4_Compact_Manuscrito.csv", row.names = FALSE)
+cat("\nTabla compacta guardada como 'Tabla4_Compact_Manuscrito.csv'\n")
+```
+```{r}
+# Paso 5: Análisis de sensibilidad
+# Bloque 7a: Identificar outliers univariados
+
+cat("========================================================================\n")
+cat("PASO 5 — ANÁLISIS DE SENSIBILIDAD\n")
+cat("Bloque 7a: Identificar outliers univariados (|z| > 3)\n")
+cat("========================================================================\n\n")
+
+# Calcular z-scores para los 13 outcomes
+outcomes_datos <- df_complete[, outcomes]
+
+# Función para calcular z-scores
+calcular_z <- function(x) {
+  (x - mean(x, na.rm = TRUE)) / sd(x, na.rm = TRUE)
+}
+
+# Calcular z-scores para cada outcome
+z_scores <- as.data.frame(lapply(outcomes_datos, calcular_z))
+colnames(z_scores) <- paste0(outcomes, "_z")
+
+# Identificar casos con |z| > 3 en CUALQUIER outcome
+outliers_matrix <- abs(z_scores) > 3
+casos_con_outliers <- apply(outliers_matrix, 1, any)
+
+# IDs de casos outliers
+id_outliers <- which(casos_con_outliers)
+n_outliers <- sum(casos_con_outliers)
+
+cat("Número de casos con |z| > 3 en al menos un outcome:", n_outliers, "\n")
+cat("Porcentaje de la muestra:", round(n_outliers/nrow(df_complete)*100, 1), "%\n\n")
+
+if (n_outliers > 0) {
+  cat("IDs de casos outliers:", id_outliers, "\n\n")
+  
+  # Mostrar en qué variables son outliers
+  cat("Detalle de outliers por variable:\n")
+  for (i in 1:length(outcomes)) {
+    outliers_var <- which(outliers_matrix[, i])
+    if (length(outliers_var) > 0) {
+      cat("  -", outcomes[i], ":", length(outliers_var), "casos →", 
+          "IDs:", outliers_var, "\n")
+    }
+  }
+  
+  cat("\n")
+  
+  # Crear dataset sin outliers
+  df_no_outliers <- df_complete[!casos_con_outliers, ]
+  
+  cat("Dataset original: N =", nrow(df_complete), "\n")
+  cat("Dataset sin outliers: N =", nrow(df_no_outliers), "\n")
+  cat("Casos excluidos:", nrow(df_complete) - nrow(df_no_outliers), "\n\n")
+  
+} else {
+  cat("No se detectaron outliers univariados con |z| > 3.\n")
+}
+
+cat("========================================================================\n")
+```
+
+```{r}
+# Bloque 7b: Re-ajustar modelos sin outliers
+
+cat("Bloque 7b: Re-ajustar 13 modelos sin outliers (N = 83)\n\n")
+
+# Re-ajustar los 13 modelos en dataset sin outliers
+modelos_sensibilidad <- list()
+resultados_sensibilidad <- list()
+
+for (i in seq_along(outcomes)) {
+  outcome_actual <- outcomes[i]
+  formula_actual <- as.formula(paste(outcome_actual, "~", predictores))
+  
+  modelo <- lm(formula_actual, data = df_no_outliers)
+  modelos_sensibilidad[[outcome_actual]] <- modelo
+  
+  # Extraer resultados
+  coefs <- summary(modelo)$coefficients
+  r2 <- summary(modelo)$r.squared
+  r2_adj <- summary(modelo)$adj.r.squared
+  f2 <- r2 / (1 - r2)
+  
+  # Betas estandarizados
+  modelo_std <- lm.beta(modelo)
+  betas_std <- coef(modelo_std)[-1]
+  
+  resultados_sensibilidad[[outcome_actual]] <- list(
+    modelo = modelo,
+    coefs = coefs,
+    betas_std = betas_std,
+    r2 = r2,
+    r2_adj = r2_adj,
+    f2 = f2
+  )
+  
+  cat(i, ". ", outcome_actual, ": R² = ", round(r2, 3), 
+      " (original: ", round(resultados_lista[[outcome_actual]]$r2, 3), ")\n", sep = "")
+}
+
+cat("\n")
+
+# Comparación de resultados clave
+cat("========================================================================\n")
+cat("COMPARACIÓN: Análisis principal vs. Sensibilidad\n")
+cat("========================================================================\n\n")
+
+# Crear tabla comparativa para EDUCACIÓN (predictor principal)
+cat("EDUCACIÓN (predictor dominante):\n")
+cat("Outcome                  | Original β | Sensib β | Original p | Sensib p\n")
+cat("-------------------------|------------|----------|------------|---------\n")
+
+for (outcome in outcomes) {
+  # Original
+  orig <- resultados_lista[[outcome]]
+  orig_educ <- which(names(orig$betas_std) == "educacion")
+  orig_beta <- orig$betas_std[orig_educ]
+  orig_p <- orig$coefs["educacion", "Pr(>|t|)"]
+  
+  # Sensibilidad
+  sens <- resultados_sensibilidad[[outcome]]
+  sens_educ <- which(names(sens$betas_std) == "educacion")
+  sens_beta <- sens$betas_std[sens_educ]
+  sens_p <- sens$coefs["educacion", "Pr(>|t|)"]
+  
+  # Formatear p-values
+  format_p_simple <- function(p) {
+    if (p < 0.001) return("<.001")
+    else if (p < 0.01) return(sprintf("%.3f**", p))
+    else if (p < 0.05) return(sprintf("%.3f*", p))
+    else return(sprintf("%.3f", p))
+  }
+  
+  cat(sprintf("%-24s |   %6.3f   |  %6.3f  |  %8s  | %8s\n",
+              substr(outcome, 1, 24),
+              orig_beta, sens_beta,
+              format_p_simple(orig_p),
+              format_p_simple(sens_p)))
+}
+
+cat("\n")
+
+# Comparación para DOMINANCIA L1/L2
+cat("DOMINANCIA L1/L2 (hallazgo clave negativo):\n")
+cat("Outcome                  | Original β | Sensib β | Original p | Sensib p\n")
+cat("-------------------------|------------|----------|------------|---------\n")
+
+for (outcome in c("hvlt_tardia", "flu_fon_total", "bta_total")) {
+  orig <- resultados_lista[[outcome]]
+  orig_l1l2 <- which(names(orig$betas_std) == "dom_L1L2")
+  orig_beta <- orig$betas_std[orig_l1l2]
+  orig_p <- orig$coefs["dom_L1L2", "Pr(>|t|)"]
+  
+  sens <- resultados_sensibilidad[[outcome]]
+  sens_l1l2 <- which(names(sens$betas_std) == "dom_L1L2")
+  sens_beta <- sens$betas_std[sens_l1l2]
+  sens_p <- sens$coefs["dom_L1L2", "Pr(>|t|)"]
+  
+  cat(sprintf("%-24s |   %6.3f   |  %6.3f  |  %8s  | %8s\n",
+              substr(outcome, 1, 24),
+              orig_beta, sens_beta,
+              format_p_simple(orig_p),
+              format_p_simple(sens_p)))
+}
+
+cat("\n========================================================================\n")
+```
+```{r}
+# Paso 6: Figuras publicables
+# Bloque 8a: Forest plot de βs estandarizados con IC95%
+
+library(ggplot2)
+library(dplyr)
+
+cat("========================================================================\n")
+cat("PASO 6 — FIGURAS PUBLICABLES\n")
+cat("Bloque 8a: Forest plot de βs estandarizados\n")
+cat("========================================================================\n\n")
+
+# Preparar datos para forest plot
+# Extraer βs e ICs para Educación y Dominancia L1/L2
+
+forest_data <- data.frame(
+  outcome = character(),
+  predictor = character(),
+  beta_std = numeric(),
+  ci_low = numeric(),
+  ci_high = numeric(),
+  p_value = numeric(),
+  domain = character(),
+  stringsAsFactors = FALSE
+)
+
+# Definir dominios cognitivos para agrupación
+dominios_map <- c(
+  "hvlt_total" = "Verbal Memory",
+  "hvlt_tardia" = "Verbal Memory",
+  "hvlt_recon" = "Verbal Memory",
+  "rey_memoria" = "Visuospatial Memory",
+  "rey_copia" = "Visuospatial Memory",
+  "flu_fon_total" = "Verbal Fluency",
+  "flu_sem_total" = "Verbal Fluency",
+  "bta_total" = "Attention",
+  "sdmt_correct" = "Processing Speed",
+  "tmt_a_inv" = "Processing Speed",
+  "tmt_b_inv" = "Executive Function",
+  "wcst_cat" = "Executive Function",
+  "stroop_pc_calc" = "Executive Function"
+)
+
+# Extraer datos para Educación y Dominancia L1/L2
+for (outcome in outcomes) {
+  modelo <- resultados_lista[[outcome]]$modelo
+  
+  # Educación
+  educ_coef <- summary(modelo)$coefficients["educacion", ]
+  educ_confint <- confint(modelo)["educacion", ]
+  educ_beta_std <- resultados_lista[[outcome]]$betas_std["educacion"]
+  
+  # Calcular IC95% para beta estandarizado (aproximación)
+  se_std <- educ_coef["Std. Error"] * (sd(df_complete$educacion) / sd(df_complete[[outcome]]))
+  educ_ci_low <- educ_beta_std - 1.96 * se_std
+  educ_ci_high <- educ_beta_std + 1.96 * se_std
+  
+  forest_data <- rbind(forest_data, data.frame(
+    outcome = outcome,
+    predictor = "Education",
+    beta_std = educ_beta_std,
+    ci_low = educ_ci_low,
+    ci_high = educ_ci_high,
+    p_value = educ_coef["Pr(>|t|)"],
+    domain = dominios_map[outcome]
+  ))
+  
+  # Dominancia L1/L2
+  l1l2_coef <- summary(modelo)$coefficients["dom_L1L2", ]
+  l1l2_beta_std <- resultados_lista[[outcome]]$betas_std["dom_L1L2"]
+  
+  se_std_l1l2 <- l1l2_coef["Std. Error"] * (sd(df_complete$dom_L1L2) / sd(df_complete[[outcome]]))
+  l1l2_ci_low <- l1l2_beta_std - 1.96 * se_std_l1l2
+  l1l2_ci_high <- l1l2_beta_std + 1.96 * se_std_l1l2
+  
+  forest_data <- rbind(forest_data, data.frame(
+    outcome = outcome,
+    predictor = "L1/L2 Dominance",
+    beta_std = l1l2_beta_std,
+    ci_low = l1l2_ci_low,
+    ci_high = l1l2_ci_high,
+    p_value = l1l2_coef["Pr(>|t|)"],
+    domain = dominios_map[outcome]
+  ))
+}
+
+# Etiquetas más limpias para outcomes (sin recode)
+outcome_labels_map <- c(
+  "hvlt_total" = "HVLT Total",
+  "hvlt_tardia" = "HVLT Delayed",
+  "hvlt_recon" = "HVLT Recognition",
+  "rey_memoria" = "Rey Recall",
+  "rey_copia" = "Rey Copy",
+  "flu_fon_total" = "Phonological Fluency",
+  "flu_sem_total" = "Semantic Fluency",
+  "bta_total" = "BTA",
+  "sdmt_correct" = "SDMT",
+  "tmt_a_inv" = "TMT-A",
+  "tmt_b_inv" = "TMT-B",
+  "wcst_cat" = "WCST",
+  "stroop_pc_calc" = "Stroop"
+)
+
+forest_data$outcome_label <- outcome_labels_map[forest_data$outcome]
+
+# Significancia
+forest_data$significance <- ifelse(forest_data$p_value < 0.001, "p < .001",
+                            ifelse(forest_data$p_value < 0.01, "p < .01",
+                            ifelse(forest_data$p_value < 0.05, "p < .05", "ns")))
+
+cat("Datos preparados para forest plot.\n")
+cat("Total filas:", nrow(forest_data), "(13 outcomes × 2 predictores)\n\n")
+
+# Ver primeras filas
+print(head(forest_data, 10))
+```
+
+```{r}
+# Bloque 8b: Crear forest plot
+
+# Ordenar outcomes por dominio para mejor visualización
+forest_data$outcome_label <- factor(forest_data$outcome_label,
+  levels = c(
+    "HVLT Total", "HVLT Delayed", "HVLT Recognition",
+    "Rey Recall", "Rey Copy",
+    "Phonological Fluency", "Semantic Fluency",
+    "BTA",
+    "SDMT", "TMT-A",
+    "TMT-B", "WCST", "Stroop"
+  )
+)
+
+# Crear forest plot
+forest_plot <- ggplot(forest_data, aes(x = beta_std, y = outcome_label)) +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "gray50", size = 0.5) +
+  geom_errorbarh(aes(xmin = ci_low, xmax = ci_high, color = significance),
+                 height = 0.2, size = 0.8) +
+  geom_point(aes(color = significance, shape = significance), size = 3) +
+  facet_wrap(~ predictor, ncol = 2, scales = "free_x") +
+  scale_color_manual(
+    values = c("p < .001" = "#D55E00", "p < .01" = "#E69F00", 
+               "p < .05" = "#56B4E9", "ns" = "gray60"),
+    name = "Significance"
+  ) +
+  scale_shape_manual(
+    values = c("p < .001" = 16, "p < .01" = 16, "p < .05" = 16, "ns" = 1),
+    name = "Significance"
+  ) +
+  labs(
+    title = "Figure 2. Standardized Regression Coefficients with 95% CI",
+    x = "Standardized β",
+    y = NULL
+  ) +
+  theme_minimal(base_size = 11) +
+  theme(
+    plot.title = element_text(face = "bold", size = 12),
+    axis.text.y = element_text(size = 10),
+    axis.text.x = element_text(size = 9),
+    legend.position = "bottom",
+    panel.grid.major.y = element_line(color = "gray90"),
+    panel.grid.minor = element_blank(),
+    strip.text = element_text(face = "bold", size = 11),
+    strip.background = element_rect(fill = "gray95", color = NA)
+  )
+
+print(forest_plot)
+
+# Guardar figura en alta resolución
+ggsave("Figure2_Forest_Plot.png", forest_plot, 
+       width = 10, height = 8, dpi = 300, bg = "white")
+
+cat("\nFigura 2 guardada como 'Figure2_Forest_Plot.png'\n")
+cat("Dimensiones: 10 × 8 pulgadas, 300 dpi\n\n")
+
+# Resumen de hallazgos del forest plot
+cat("========================================================================\n")
+cat("RESUMEN VISUAL - FIGURE 2:\n")
+cat("========================================================================\n\n")
+
+cat("EDUCATION (panel izquierdo):\n")
+educ_data <- forest_data[forest_data$predictor == "Education", ]
+educ_sig <- sum(educ_data$p_value < 0.05)
+cat("  - ", educ_sig, " de 13 outcomes significativos (p < .05)\n", sep = "")
+cat("  - Rango de βs:", round(min(educ_data$beta_std), 2), "a", 
+    round(max(educ_data$beta_std), 2), "\n")
+cat("  - TODOS los βs positivos (más educación → mejor rendimiento)\n\n")
+
+cat("L1/L2 DOMINANCE (panel derecho):\n")
+l1l2_data <- forest_data[forest_data$predictor == "L1/L2 Dominance", ]
+l1l2_sig <- sum(l1l2_data$p_value < 0.05)
+cat("  - ", l1l2_sig, " de 13 outcomes significativos (p < .05)\n", sep = "")
+cat("  - Significativos TODOS negativos (mayor dominancia L1 → peor rendimiento)\n")
+sig_outcomes <- l1l2_data[l1l2_data$p_value < 0.05, "outcome_label"]
+cat("  - Outcomes significativos:", paste(sig_outcomes, collapse = ", "), "\n\n")
+
+cat("========================================================================\n")
+```
+
+
+```{r}
+# Bloque 8c: Radar plot del perfil neuropsicológico
+
+library(fmsb)
+
+cat("========================================================================\n")
+cat("Bloque 8c: Radar plot del perfil neuropsicológico\n")
+cat("========================================================================\n\n")
+
+# Calcular medias y z-scores para los 13 outcomes
+# Normalizar a percentiles (0-100) para mejor visualización
+
+radar_data <- data.frame(
+  outcome = outcomes,
+  mean_raw = numeric(length(outcomes)),
+  mean_z = numeric(length(outcomes)),
+  percentile = numeric(length(outcomes))
+)
+
+for (i in 1:length(outcomes)) {
+  outcome_name <- outcomes[i]
+  valores <- df_complete[[outcome_name]]
+  
+  radar_data$mean_raw[i] <- mean(valores, na.rm = TRUE)
+  radar_data$mean_z[i] <- 0  # Por definición, la media de z-scores es 0
+  
+  # Calcular percentil relativo (escala 0-100)
+  # Usamos la media como referencia
+  radar_data$percentile[i] <- 50  # Media poblacional = percentil 50
+}
+
+# Para hacer el radar más informativo, vamos a mostrar
+# el rendimiento promedio AJUSTADO por educación
+# (predicción del modelo para educación promedio)
+
+radar_predictions <- data.frame(
+  outcome = character(),
+  pred_low_edu = numeric(),
+  pred_mean_edu = numeric(),
+  pred_high_edu = numeric(),
+  stringsAsFactors = FALSE
+)
+
+# Niveles de educación para comparar
+edu_low <- mean(df_complete$educacion) - sd(df_complete$educacion)   # -1 SD
+edu_mean <- mean(df_complete$educacion)                               # Media
+edu_high <- mean(df_complete$educacion) + sd(df_complete$educacion)  # +1 SD
+
+# Valores fijos para otros predictores (en sus medias)
+edad_mean <- mean(df_complete$edad)
+genero_ref <- 0  # Masculino como referencia
+dom_mean <- mean(df_complete$dom_L1L2)
+accult_mean <- mean(df_complete$acculturation_mean)
+
+for (outcome in outcomes) {
+  modelo <- resultados_lista[[outcome]]$modelo
+  
+  # Predicciones para 3 niveles de educación
+  newdata_low <- data.frame(edad = edad_mean, educacion = edu_low, 
+                            genero = "Male", dom_L1L2 = dom_mean, 
+                            acculturation_mean = accult_mean)
+  newdata_mean <- data.frame(edad = edad_mean, educacion = edu_mean, 
+                             genero = "Male", dom_L1L2 = dom_mean, 
+                             acculturation_mean = accult_mean)
+  newdata_high <- data.frame(edad = edad_mean, educacion = edu_high, 
+                             genero = "Male", dom_L1L2 = dom_mean, 
+                             acculturation_mean = accult_mean)
+  
+  pred_low <- predict(modelo, newdata = newdata_low)
+  pred_mean <- predict(modelo, newdata = newdata_mean)
+  pred_high <- predict(modelo, newdata = newdata_high)
+  
+  radar_predictions <- rbind(radar_predictions, data.frame(
+    outcome = outcome,
+    pred_low_edu = pred_low,
+    pred_mean_edu = pred_mean,
+    pred_high_edu = pred_high
+  ))
+}
+
+# Normalizar predicciones a escala 0-100 (percentiles)
+# Usamos min-max scaling por dominio
+
+normalize_to_100 <- function(x) {
+  (x - min(x)) / (max(x) - min(x)) * 100
+}
+
+radar_predictions$norm_low <- normalize_to_100(radar_predictions$pred_low_edu)
+radar_predictions$norm_mean <- normalize_to_100(radar_predictions$pred_mean_edu)
+radar_predictions$norm_high <- normalize_to_100(radar_predictions$pred_high_edu)
+
+# Preparar datos para fmsb::radarchart
+# Formato: primera fila = max, segunda fila = min, siguientes filas = datos
+
+# Etiquetas cortas para el radar
+labels_radar <- c("HVLT\nTotal", "HVLT\nDelayed", "HVLT\nRecog",
+                  "Rey\nRecall", "Rey\nCopy",
+                  "Phon\nFluency", "Sem\nFluency",
+                  "BTA",
+                  "SDMT",
+                  "TMT-A", "TMT-B",
+                  "WCST", "Stroop")
+
+# Crear matriz para radar (transponer para que columnas = outcomes)
+radar_matrix <- rbind(
+  max = rep(100, 13),
+  min = rep(0, 13),
+  Low_Education = radar_predictions$norm_low,
+  Mean_Education = radar_predictions$norm_mean,
+  High_Education = radar_predictions$norm_high
+)
+
+colnames(radar_matrix) <- labels_radar
+
+cat("Generando Figura 3: Radar plot...\n\n")
+
+# Crear radar plot
+png("Figure3_Radar_Plot.png", width = 3000, height = 3000, res = 300)
+
+radarchart(
+  as.data.frame(radar_matrix),
+  axistype = 1,
+  pcol = c("#0072B2", "#E69F00", "#D55E00"),  # Azul, naranja, rojo
+  pfcol = c(rgb(0, 0.45, 0.7, 0.3), rgb(0.9, 0.6, 0, 0.3), rgb(0.8, 0.4, 0, 0.3)),
+  plwd = 2,
+  plty = 1,
+  cglcol = "grey70",
+  cglty = 1,
+  axislabcol = "grey20",
+  caxislabels = seq(0, 100, 25),
+  cglwd = 0.8,
+  vlcex = 0.8,
+  title = "Figure 3. Cognitive Profile by Education Level"
+)
+
+legend(
+  x = "bottomright",
+  legend = c("Low Education (-1 SD)", "Mean Education", "High Education (+1 SD)"),
+  col = c("#0072B2", "#E69F00", "#D55E00"),
+  lty = 1,
+  lwd = 2,
+  cex = 0.9,
+  bty = "n"
+)
+
+dev.off()
+
+cat("Figura 3 guardada como 'Figure3_Radar_Plot.png'\n")
+cat("Muestra el perfil cognitivo predicho para 3 niveles de educación.\n\n")
+
+cat("========================================================================\n")
+```
+
+```{r}
+# Paso 7: STROBE Checklist (23 items)
+
+cat("========================================================================\n")
+cat("PASO 7 — STROBE CHECKLIST\n")
+cat("========================================================================\n\n")
+
+strobe_items <- data.frame(
+  Item = 1:23,
+  Section = c(
+    "Title", "Abstract",
+    "Background", "Objectives",
+    rep("Methods", 12),
+    rep("Results", 5),
+    "Discussion",
+    "Funding"
+  ),
+  Topic = c(
+    "Title informativo", "Abstract estructurado",
+    "Contexto y rationale", "Objetivos específicos",
+    "Study design", "Setting", "Participants", "Variables", "Data sources",
+    "Bias", "Study size", "Quantitative variables", 
+    "Statistical methods - descriptive", "Statistical methods - models",
+    "Statistical methods - missing", "Statistical methods - sensitivity",
+    "Participant flow", "Descriptive data", "Outcome data", 
+    "Main results", "Other analyses",
+    "Interpretation/Limitations",
+    "Funding sources"
+  ),
+  Status = c(
+    "PENDING", "PENDING",
+    "PENDING", "PENDING",
+    rep("READY", 12),
+    rep("READY", 5),
+    "PENDING",
+    "PENDING"
+  )
+)
+
+ready <- sum(strobe_items$Status == "READY")
+total <- nrow(strobe_items)
+
+cat("CUMPLIMIENTO STROBE: ", ready, "/", total, " ítems (", 
+    round(ready/total*100, 0), "%)\n\n", sep = "")
+
+cat("✓ Methods: 12/12 completos\n")
+cat("✓ Results: 5/5 completos\n")
+cat("⧗ Pendientes de redacción: 6 ítems\n\n")
+
+cat("========================================================================\n\n")
+
+cat("MATERIALES LISTOS PARA EL MANUSCRITO:\n\n")
+cat("TABLAS:\n")
+cat("  ✓ Tabla 1: Sociodemográficos (N=88)\n")
+cat("  ✓ Tabla 2: Neuropsicológicos (13 indicadores)\n")
+cat("  ✓ Tabla 4: Regresiones múltiples (βs, IC95%, R²)\n\n")
+
+cat("FIGURAS:\n")
+cat("  ✓ Figura 1: Heatmap correlaciones\n")
+cat("  ✓ Figura 2: Forest plot\n")
+cat("  ✓ Figura 3: Radar plot\n\n")
+
+cat("ANÁLISIS:\n")
+cat("  ✓ 13 modelos OLS con supuestos verificados\n")
+cat("  ✓ Análisis sensibilidad (N=83)\n")
+cat("  ✓ Código reproducible completo\n\n")
+
+cat("========================================================================\n\n")
+
+cat("ANÁLISIS ESTADÍSTICO COMPLETADO — 7/7 PASOS ✓\n\n")
+
+cat("Próximo: Redactar manuscrito (Title, Abstract, Intro, Discussion)\n")
+
+write.csv(strobe_items, "STROBE_Checklist.csv", row.names = FALSE)
+cat("Checklist guardado.\n")
+```
+```{r}
+# Bloque 10: Consolidar outputs y copiar a carpeta destino
+
+cat("========================================================================\n")
+cat("CONSOLIDACIÓN DE OUTPUTS\n")
+cat("========================================================================\n\n")
+
+# Carpeta destino (Windows)
+output_dir <- "C:/Users/LENOVO/Mi unidad/Maestria_Uniandes/01_Articulo1/outputs"
+
+# Crear carpeta si no existe
+if (!dir.exists(output_dir)) {
+  dir.create(output_dir, recursive = TRUE)
+  cat("Carpeta creada:", output_dir, "\n\n")
+} else {
+  cat("Carpeta destino:", output_dir, "\n\n")
+}
+
+# Listar archivos generados en directorio de trabajo
+cat("ARCHIVOS GENERADOS EN DIRECTORIO DE TRABAJO:\n")
+cat("============================================\n\n")
+
+archivos_generados <- c(
+  # Tablas CSV
+  "Tabla4_Regresiones_Completa.csv",
+  "Tabla4_Manuscrito_Compacta.csv",
+  "Tabla4_Wide_Manuscrito.csv",
+  "Tabla4_Compact_Manuscrito.csv",
+  "STROBE_Checklist.csv",
+  
+  # Figuras PNG
+  "Figure1_Correlation_Heatmap.png",
+  "Figure2_Forest_Plot.png",
+  "Figure3_Radar_Plot.png",
+  
+  # Scripts R (si guardaste alguno)
+  "01_data_preparation.R"
+)
+
+# Verificar cuáles existen
+archivos_existentes <- archivos_generados[file.exists(archivos_generados)]
+
+cat("Archivos encontrados:", length(archivos_existentes), "\n\n")
+
+for (archivo in archivos_existentes) {
+  size_kb <- round(file.size(archivo) / 1024, 1)
+  cat("  ✓", archivo, "(", size_kb, "KB)\n")
+}
+
+cat("\n")
+
+# Copiar archivos a carpeta destino
+cat("COPIANDO ARCHIVOS A CARPETA DE OUTPUTS...\n\n")
+
+archivos_copiados <- 0
+for (archivo in archivos_existentes) {
+  destino <- file.path(output_dir, archivo)
+  tryCatch({
+    file.copy(archivo, destino, overwrite = TRUE)
+    cat("  ✓ Copiado:", archivo, "\n")
+    archivos_copiados <- archivos_copiados + 1
+  }, error = function(e) {
+    cat("  ✗ Error copiando", archivo, ":", e$message, "\n")
+  })
+}
+
+cat("\nTotal archivos copiados:", archivos_copiados, "\n\n")
+
+cat("========================================================================\n")
+cat("UBICACIÓN DE OUTPUTS:\n")
+cat(output_dir, "\n")
+cat("========================================================================\n\n")
+
+# Listar archivos en la carpeta destino
+cat("Contenido de la carpeta de outputs:\n")
+archivos_destino <- list.files(output_dir, full.names = FALSE)
+cat("Total archivos:", length(archivos_destino), "\n\n")
+for (f in archivos_destino) {
+  cat("  -", f, "\n")
+}
+```
+
+```{r}
+# Bloque 11: Crear documento Word consolidado
+
+library(officer)
+library(flextable)
+
+cat("Generando documento Word consolidado...\n\n")
+
+# Crear documento Word
+doc <- read_docx()
+
+# PORTADA
+doc <- doc %>%
+  body_add_par("NEUROPSYCHOLOGICAL PROFILE OF EMBERA CHAMÍ ADULTS", 
+               style = "heading 1") %>%
+  body_add_par("Cross-Sectional Study", style = "heading 2") %>%
+  body_add_par("") %>%
+  body_add_par("Resguardo Honduras, Embera Chamí") %>%
+  body_add_par("Florencia, Caquetá, Colombia") %>%
+  body_add_par("") %>%
+  body_add_par(paste("Analysis Date:", Sys.Date())) %>%
+  body_add_par("N = 88 bilingual adults") %>%
+  body_add_break()
+
+# RESUMEN EJECUTIVO
+doc <- doc %>%
+  body_add_par("EXECUTIVE SUMMARY", style = "heading 1") %>%
+  body_add_par("") %>%
+  body_add_par("Key Findings:", style = "heading 2") %>%
+  body_add_par("") %>%
+  body_add_par("1. EDUCATION: Dominant predictor (12/13 models significant, β = 0.25-0.69)") %>%
+  body_add_par("   - Strongest effects: SDMT (β=0.69), BTA (β=0.58), Rey Recall (β=0.55)") %>%
+  body_add_par("   - Explains up to 65% of variance in attention") %>%
+  body_add_par("") %>%
+  body_add_par("2. L1/L2 DOMINANCE: Novel finding (3/13 significant, ALL negative)") %>%
+  body_add_par("   - HVLT Delayed: β = -0.236, p = 0.036") %>%
+  body_add_par("   - Phonological Fluency: β = -0.209, p = 0.018") %>%
+  body_add_par("   - BTA: β = -0.210, p = 0.009") %>%
+  body_add_par("   - Interpretation: Higher Embera (L1) dominance → worse performance") %>%
+  body_add_par("   - Implication: Balanced bilingualism is protective") %>%
+  body_add_par("") %>%
+  body_add_par("3. GENDER, AGE, ACCULTURATION: Minimal effects after controlling education") %>%
+  body_add_break()
+
+# TABLA 4 - Regresiones (formato compacto)
+doc <- doc %>%
+  body_add_par("Table 4. Multiple Regression Results", style = "heading 1") %>%
+  body_add_par("Standardized β coefficients with 95% CI and p-values") %>%
+  body_add_par("")
+
+# Leer tabla 4 compacta
+tabla4 <- read.csv(file.path(output_dir, "Tabla4_Compact_Manuscrito.csv"))
+
+# Crear flextable
+ft4 <- flextable(tabla4) %>%
+  set_caption("Multiple regression models (N=88). *** p<.001, ** p<.01, * p<.05, † p<.10") %>%
+  theme_booktabs() %>%
+  autofit()
+
+doc <- doc %>%
+  body_add_flextable(ft4) %>%
+  body_add_break()
+
+# FIGURAS
+doc <- doc %>%
+  body_add_par("FIGURES", style = "heading 1") %>%
+  body_add_par("")
+
+# Figura 1
+doc <- doc %>%
+  body_add_par("Figure 1. Correlation Matrix with Hierarchical Clustering", 
+               style = "heading 2") %>%
+  body_add_img(src = file.path(output_dir, "Figure1_Correlation_Heatmap.png"),
+               width = 6, height = 5) %>%
+  body_add_par("") %>%
+  body_add_par("Spearman correlations among 13 neuropsychological indicators (N=88). Three clusters identified: (1) Verbal memory (HVLT), (2) Mixed (visuospatial + speed + attention + executive), (3) Verbal fluency.") %>%
+  body_add_break()
+
+# Figura 2
+doc <- doc %>%
+  body_add_par("Figure 2. Forest Plot of Standardized Regression Coefficients", 
+               style = "heading 2") %>%
+  body_add_img(src = file.path(output_dir, "Figure2_Forest_Plot.png"),
+               width = 7, height = 6) %>%
+  body_add_par("") %>%
+  body_add_par("Standardized β coefficients with 95% CI for Education and L1/L2 Dominance predictors across 13 neuropsychological outcomes. Education shows consistent positive effects (left panel). L1/L2 Dominance shows negative effects on verbal memory, fluency, and attention (right panel).") %>%
+  body_add_break()
+
+# Figura 3
+doc <- doc %>%
+  body_add_par("Figure 3. Cognitive Profile by Education Level", 
+               style = "heading 2") %>%
+  body_add_img(src = file.path(output_dir, "Figure3_Radar_Plot.png"),
+               width = 6, height = 6) %>%
+  body_add_par("") %>%
+  body_add_par("Radar plot showing predicted neuropsychological performance for three education levels: Low (-1 SD), Mean, and High (+1 SD). Higher education is associated with better performance across all cognitive domains.") %>%
+  body_add_break()
+
+# SENSITIVITY ANALYSIS
+doc <- doc %>%
+  body_add_par("SENSITIVITY ANALYSIS", style = "heading 1") %>%
+  body_add_par("") %>%
+  body_add_par("Models re-fitted excluding 5 univariate outliers (|z| > 3):", style = "heading 2") %>%
+  body_add_par("") %>%
+  body_add_par("Original N = 88 vs. Sensitivity N = 83") %>%
+  body_add_par("") %>%
+  body_add_par("Results:") %>%
+  body_add_par("• Education: ROBUST (12/13 significant maintained)") %>%
+  body_add_par("• L1/L2 Dominance: ROBUST (2/3 strengthened, 1 marginal)") %>%
+  body_add_par("• R² changes: <±0.05 in most models") %>%
+  body_add_par("") %>%
+  body_add_par("Conclusion: Main findings are robust to outlier exclusion.") %>%
+  body_add_break()
+
+# STROBE CHECKLIST
+doc <- doc %>%
+  body_add_par("STROBE CHECKLIST", style = "heading 1") %>%
+  body_add_par("")
+
+strobe <- read.csv(file.path(output_dir, "STROBE_Checklist.csv"))
+ft_strobe <- flextable(strobe) %>%
+  set_caption("STROBE checklist for cross-sectional studies") %>%
+  theme_booktabs() %>%
+  autofit()
+
+doc <- doc %>%
+  body_add_flextable(ft_strobe)
+
+# Guardar documento
+output_path <- file.path(output_dir, "Analisis_Completo_Embera_Chami.docx")
+print(doc, target = output_path)
+
+cat("========================================================================\n")
+cat("DOCUMENTO CONSOLIDADO GENERADO:\n")
+cat(output_path, "\n")
+cat("========================================================================\n\n")
+
+cat("El documento incluye:\n")
+cat("  ✓ Resumen ejecutivo de hallazgos\n")
+cat("  ✓ Tabla 4 (regresiones múltiples)\n")
+cat("  ✓ Figura 1 (heatmap correlaciones)\n")
+cat("  ✓ Figura 2 (forest plot)\n")
+cat("  ✓ Figura 3 (radar plot)\n")
+cat("  ✓ Análisis de sensibilidad\n")
+cat("  ✓ STROBE checklist\n\n")
+
+cat("ANÁLISIS ESTADÍSTICO COMPLETADO ✓\n")
+```
+
+

@@ -1,0 +1,576 @@
+---
+title: "Article 2 — Acculturation, Linguistic Dominance and Health-Related Quality of Life in Embera Chamí Adults"
+subtitle: "Step 1: Data Preparation"
+author:
+  - name: "Carlos E. Zapata Bohórquez"
+    affiliation: "Universidad Pública de Navarra (UPNA)"
+date: "`r format(Sys.time(), '%d %B %Y')`"
+output:
+  html_document:
+    toc: true
+    toc_depth: 3
+    toc_float: true
+    number_sections: true
+    theme: flatly
+    highlight: tango
+    df_print: paged
+    code_folding: show
+params:
+  path_a1: "C:/Users/LENOVO/Mi unidad/Maestria_Uniandes/01_Articulo1/data/"
+  path_a2: "C:/Users/LENOVO/Mi unidad/Maestria_Uniandes/02_Articulo2/data/"
+  n_expected: 88
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo    = TRUE,
+  warning = FALSE,
+  message = FALSE,
+  comment = "#>",
+  fig.align = "center"
+)
+```
+
+---
+
+> **Scope of this document:** Build the analytic dataset for Article 2 by 
+> re-using the cleaned objects produced in `01_data_preparation.Rmd` (Article 1)
+> and adding SF-36 scoring (RAND-36 algorithm; Hays, Sherbourne & Mazel, 1993).
+> No descriptive statistics or inferential analyses are run here.  
+> Those belong to Steps 2–5.
+>
+> **Reporting standard:** STROBE (cross-sectional observational study).  
+> **Ethics:** Comité de Ética Facultad de Medicina, Universidad de los Andes.  
+> Acta N° 202001281, sesión 28/01/2020.
+
+```{r packages}
+# Paquetes requeridos. Instalación silenciosa si falta alguno.
+.pkgs <- c("readxl", "dplyr", "tidyr", "purrr", "psych", 
+           "janitor", "knitr", "kableExtra")
+.missing <- setdiff(.pkgs, rownames(installed.packages()))
+if (length(.missing)) install.packages(.missing, dependencies = TRUE)
+
+suppressPackageStartupMessages({
+  library(readxl)
+  library(dplyr,  warn.conflicts = FALSE)
+  library(tidyr)
+  library(purrr)
+  library(psych)
+  library(janitor)
+  library(knitr)
+  library(kableExtra)
+})
+
+options(scipen = 999, digits = 3)
+set.seed(20260101)   # mismo seed que el A1, reproducibilidad
+
+cat("R version:", R.version.string, "\n")
+cat("Timestamp:", format(Sys.time(), "%Y-%m-%d %H:%M:%S %Z"), "\n")
+cat("Working dir:", getwd(), "\n")
+```
+```{r load-xlsx}
+# ============================================================
+# CARGA DEL ARCHIVO EXCEL (desde carpeta del A2)
+# ============================================================
+
+path_xlsx <- file.path(path_a2, "Database_indígenas_colombia_ORIGIN.xlsx")
+
+if (!file.exists(path_xlsx)) {
+  stop("Archivo no encontrado:\n  ", path_xlsx,
+       "\nVerifica que Database_indígenas_colombia_ORIGIN.xlsx esté en data/")
+}
+
+cat("Cargando archivo:\n  ", path_xlsx, "\n\n")
+
+df_raw <- read_excel(
+  path      = path_xlsx,
+  sheet     = "Total Bateria",
+  na        = c("", "NA", "Na", "na", "NaN", "nan", "."),
+  guess_max = 200
+)
+
+# ============================================================
+# FILTRAR FILAS VACÍAS
+# ============================================================
+# El archivo Excel tiene ~109 filas pero las últimas 21 son
+# estructuralmente vacías (artefacto del template de captura).
+# Filtramos por ID no missing para recuperar los 88 casos reales.
+
+df_raw <- df_raw %>% filter(!is.na(ID))
+
+cat("Filas con datos (ID no missing):", nrow(df_raw), "\n")
+cat("Columnas totales:", ncol(df_raw), "\n\n")
+
+# ============================================================
+# VALIDACIÓN ESTRUCTURAL
+# ============================================================
+# Estructura esperada (confirmada en diagnóstico previo):
+#   - 88 filas (adultos Embera Chamí)
+#   - 147 columnas organizadas en bloques:
+#       Cols 1–16:   Sociodemográficos
+#       Cols 17–32:  AC_ (aculturación, 16 ítems)
+#       Cols 33–76:  Comp_Linguistica (bilingüismo)
+#       Cols 77–112: SF1–SF36 (calidad de vida)
+#       Cols 113–115: MMSE, PHQ-9, Bartel
+#       Cols 116–147: Batería neuropsicológica (no usada en A2)
+
+stopifnot(
+  "Número de filas ≠ 88" = nrow(df_raw) == 88,
+  "Número de columnas ≠ 147" = ncol(df_raw) == 147
+)
+
+# Verificar que los bloques clave existen
+required_cols <- c(
+  "ID", "Edad", "Género", "Años de educacion",
+  paste0("AC_", c("Hablar", "Leer", "Escribir", "Religion")),
+  paste0("SF", 1:36),
+  "PHQ-9", "MMSE", "Bartel",
+  "Comp_Linguistica_P_I_Expresión", "Comp_Linguistica_S_I_Expresión"
+)
+
+missing_cols <- setdiff(required_cols, names(df_raw))
+if (length(missing_cols) > 0) {
+  stop("Faltan columnas esperadas:\n  ",
+       paste(missing_cols, collapse = "\n  "))
+}
+
+cat("✓ Estructura validada: 88 filas × 147 columnas\n")
+cat("✓ Bloques de variables presentes:\n")
+cat("  - Sociodemográficos\n")
+cat("  - AC_ (aculturación, 16 ítems)\n")
+cat("  - Competencia lingüística (8 variables P_I_ y S_I_)\n")
+cat("  - SF-36 (36 ítems)\n")
+cat("  - Cribados (PHQ-9, MMSE, Barthel)\n\n")
+
+cat("Primeras 5 columnas:\n")
+print(names(df_raw)[1:5])
+cat("\nÚltimas 5 columnas:\n")
+print(names(df_raw)[143:147])
+```
+
+```{r rename-and-select}
+# ============================================================
+# RENOMBRADO A SNAKE_CASE Y SELECCIÓN DE VARIABLES
+# ============================================================
+# Estrategia:
+#   - Sociodem y lingüísticas → snake_case para facilitar código
+#   - AC_ y SF → mantener nombres originales (se procesan después)
+#   - Descartar batería neuropsicológica (no se usa en A2)
+
+df <- df_raw %>%
+  rename(
+    # ── Sociodemográficos ────────────────────────────────────
+    edad       = Edad,
+    genero     = Género,
+    educacion  = `Años de educacion`,
+    bilingue   = BILINGÜE,
+    ingresos   = `INGRESOS MENSUALES`,
+    area_res   = `ÁREA DE RESIDENCIA`,
+    ocupacion  = `OCUPACIÓN U OFICIO`,
+    
+    # ── Competencia lingüística — L1 (Embera) ───────────────
+    pi_expresion   = `Comp_Linguistica_P_I_Expresión`,
+    pi_comprension = `Comp_Linguistica_P_I_Comprensión`,
+    pi_lectura     = `Comp_Linguistica_P_I_Lectura`,
+    pi_escritura   = `Comp_Linguistica_P_I_Escritura`,
+    
+    # ── Competencia lingüística — L2 (Español) ──────────────
+    si_expresion   = `Comp_Linguistica_S_I_Expresión`,
+    si_comprension = `Comp_Linguistica_S_I_Comprensión`,
+    si_lectura     = `Comp_Linguistica_S_I_Lectura`,
+    si_escritura   = `Comp_Linguistica_S_I_Escritura`,
+    
+    # ── Cribados clínicos ────────────────────────────────────
+    mmse   = MMSE,
+    phq9   = `PHQ-9`,
+    bartel = Bartel
+  ) %>%
+  # Seleccionar solo las variables que usa el A2
+  select(
+    # Identificación y sociodem
+    ID, edad, genero, educacion, bilingue, ingresos, area_res, ocupacion,
+    # Competencia lingüística (8 variables)
+    pi_expresion, pi_comprension, pi_lectura, pi_escritura,
+    si_expresion, si_comprension, si_lectura, si_escritura,
+    # Aculturación (16 ítems, nombres originales)
+    starts_with("AC_"),
+    # SF-36 (36 ítems, nombres originales)
+    starts_with("SF"),
+    # Cribados
+    mmse, phq9, bartel
+  )
+
+# ============================================================
+# TIPADO DE VARIABLES
+# ============================================================
+
+df <- df %>%
+  mutate(
+    # Género como factor (inglés, consistente con A1)
+    genero = factor(genero,
+                    levels = c("H", "M"),
+                    labels = c("Male", "Female")),
+    
+    # Numéricas explícitas
+    edad      = as.numeric(edad),
+    educacion = as.numeric(educacion),
+    phq9      = as.numeric(phq9),
+    mmse      = as.numeric(mmse),
+    bartel    = as.numeric(bartel),
+    
+    # Competencia lingüística como numérica
+    across(c(pi_expresion, pi_comprension, pi_lectura, pi_escritura,
+             si_expresion, si_comprension, si_lectura, si_escritura),
+           as.numeric),
+    
+    # AC_ como numérica
+    across(starts_with("AC_"), as.numeric),
+    
+    # SF como numérica
+    across(starts_with("SF"), as.numeric)
+  )
+
+# ============================================================
+# VALIDACIÓN POST-SELECCIÓN
+# ============================================================
+
+cat("Dataset post-selección:\n")
+cat("  Dimensiones:", nrow(df), "filas ×", ncol(df), "columnas\n\n")
+
+cat("Variables retenidas por bloque:\n")
+cat("  - Sociodem:", length(c("ID", "edad", "genero", "educacion", 
+                              "bilingue", "ingresos", "area_res", "ocupacion")), "\n")
+cat("  - Lingüísticas:", sum(grepl("^(pi|si)_", names(df))), "\n")
+cat("  - AC_ (aculturación):", sum(grepl("^AC_", names(df))), "\n")
+cat("  - SF (calidad de vida):", sum(grepl("^SF[0-9]+$", names(df))), "\n")
+cat("  - Cribados:", 3, "\n\n")
+
+cat("Tipos de las variables clave:\n")
+cat("  genero:", class(df$genero), "con niveles:", levels(df$genero), "\n")
+cat("  edad:", class(df$edad), "\n")
+cat("  phq9:", class(df$phq9), "\n")
+cat("  AC_Hablar (ejemplo):", class(df$AC_Hablar), "\n")
+cat("  SF1 (ejemplo):", class(df$SF1), "\n\n")
+
+# Verificar factor género
+stopifnot(
+  "genero no es factor de 2 niveles" = 
+    is.factor(df$genero) && nlevels(df$genero) == 2
+)
+
+cat("✓ Renombrado y selección completados\n")
+```
+
+```{r acculturation-mean}
+# ============================================================
+# CONSTRUCCIÓN DE ACCULTURATION_MEAN
+# ============================================================
+# Réplica exacta de la lógica del A1 (01_data_preparation.Rmd,
+# líneas 580-747). La aculturación se operacionaliza como el
+# PROMEDIO (escala 1-5) de 16 ítems tras:
+#   1. Recodificar AC_Religion (2-6 → 1-5)
+#   2. Invertir 9 ítems para alinear dirección
+#   3. Promediar los 16 ítems procesados
+# 
+# Dirección uniforme: mayor = más aculturación a cultura mayoritaria
+
+# ─── PASO 1: Recodificar AC_Religion (2-6 → 1-5) ───────────
+# Escala original: 2=Solo Embera, ..., 6=Solo católica/cristiana
+# Escala nueva:    1=Solo Embera, ..., 5=Solo católica/cristiana
+# El valor "1" (No religioso) no aparece en los datos; la escala
+# observada es 2-6.
+
+cat("PASO 1: Recodificación de AC_Religion\n")
+cat("────────────────────────────────────────\n")
+cat("AC_Religion ANTES (escala 2-6):\n")
+print(table(df$AC_Religion, useNA = "always"))
+
+df <- df %>%
+  mutate(
+    AC_Religion_recod = case_when(
+      AC_Religion == 2 ~ 1,
+      AC_Religion == 3 ~ 2,
+      AC_Religion == 4 ~ 3,
+      AC_Religion == 5 ~ 4,
+      AC_Religion == 6 ~ 5,
+      TRUE ~ NA_real_
+    )
+  )
+
+cat("\nAC_Religion DESPUÉS (escala 1-5):\n")
+print(table(df$AC_Religion_recod, useNA = "always"))
+
+stopifnot(
+  "AC_Religion_recod contiene NAs inesperados" = 
+    sum(is.na(df$AC_Religion_recod)) == 0
+)
+cat("✓ Recodificación completada sin NAs\n\n")
+
+# ─── PASO 2: Inversión de ítems (9 en total) ───────────────
+# Fórmula: nuevo = 6 - original (para escala Likert 1-5)
+# Esto voltea: 1↔5, 2↔4, 3↔3
+#
+# Items a invertir:
+#   - 8 de lenguaje: hablar, leer, escribir, idioma_infancia,
+#                    idioma_casa, idioma_trabajo, idioma_amigos,
+#                    idioma_pensamiento
+#   - 1 de rituales: AC_Rituales
+
+cat("PASO 2: Inversión de 9 ítems\n")
+cat("────────────────────────────────────────\n")
+
+lang_items <- c(
+  "AC_Hablar", "AC_Leer", "AC_Escribir", "AC_Idioma_Infancia",
+  "AC_Idioma_casa", "AC_Idioma_trabajo", "AC_Idioma_amigos",
+  "AC_Idioma_pensamiento"
+)
+
+df <- df %>%
+  mutate(
+    # Invertir los 8 ítems de lenguaje
+    across(all_of(lang_items), ~ 6 - .x, .names = "{.col}_inv"),
+    # Invertir AC_Rituales
+    AC_Rituales_inv = 6 - AC_Rituales
+  )
+
+# Verificación: tabla cruzada de un ítem (AC_Hablar)
+cat("Verificación de inversión (AC_Hablar):\n")
+cat("Original → Invertido\n")
+print(table(Original = df$AC_Hablar, Invertido = df$AC_Hablar_inv))
+cat("✓ Inversión correcta: 1↔5, 2↔4\n\n")
+
+# ─── PASO 3: Calcular promedio de los 16 ítems ─────────────
+# Componentes:
+#   - 9 invertidos: 8 lenguaje + 1 rituales
+#   - 7 en dirección original: amigos_cercanos, fiestas, visitas,
+#                               amigos_hijos, religion_recod,
+#                               vestimenta, se_considera
+
+cat("PASO 3: Cálculo del promedio (16 ítems)\n")
+cat("────────────────────────────────────────\n")
+
+inverted_vars <- c(paste0(lang_items, "_inv"), "AC_Rituales_inv")
+
+correct_direction_vars <- c(
+  "AC_Amigos_cercanos", "AC_Fiestas", "AC_Visitas",
+  "AC_Amigos_hijos", "AC_Religion_recod", "AC_Vestimenta",
+  "AC_Se_considera"
+)
+
+acculturation_components <- c(inverted_vars, correct_direction_vars)
+
+cat("Componentes del índice (16 ítems):\n")
+cat("  - Invertidos (9):", paste(inverted_vars, collapse = ", "), "\n")
+cat("  - Dirección original (7):", paste(correct_direction_vars, collapse = ", "), "\n\n")
+
+df <- df %>%
+  rowwise() %>%
+  mutate(
+    acculturation_mean = mean(c_across(all_of(acculturation_components)),
+                              na.rm = FALSE)  # si hay NA → resultado NA
+  ) %>%
+  ungroup()
+
+# ─── VERIFICACIÓN FINAL ─────────────────────────────────────
+
+cat("═══════════════════════════════════════════════════════════\n")
+cat("RESUMEN: acculturation_mean\n")
+cat("═══════════════════════════════════════════════════════════\n")
+cat("Estadísticos descriptivos:\n")
+print(summary(df$acculturation_mean))
+cat("\nNA count:", sum(is.na(df$acculturation_mean)), "\n")
+cat("Min:", round(min(df$acculturation_mean, na.rm = TRUE), 3), "\n")
+cat("Max:", round(max(df$acculturation_mean, na.rm = TRUE), 3), "\n")
+cat("Mean:", round(mean(df$acculturation_mean, na.rm = TRUE), 3), "\n")
+cat("SD:", round(sd(df$acculturation_mean, na.rm = TRUE), 3), "\n\n")
+
+# Validación: rango debe estar en [1, 5]
+stopifnot(
+  "acculturation_mean fuera de rango [1,5]" =
+    min(df$acculturation_mean, na.rm = TRUE) >= 1 &&
+    max(df$acculturation_mean, na.rm = TRUE) <= 5
+)
+
+cat("✓ Rango verificado: [1, 5]\n")
+cat("✓ Dirección uniforme: mayor = más aculturación\n")
+cat("✓ Construcción de acculturation_mean completada\n")
+cat("═══════════════════════════════════════════════════════════\n")
+```
+```{r dominance-l1l2}
+# ============================================================
+# CONSTRUCCIÓN DE DOM_L1L2 (DOMINANCIA LINGÜÍSTICA)
+# ============================================================
+# Índice de dominancia lingüística = media L1 - media L2
+# 
+# L1 (Embera): media de pi_expresion, pi_comprension,
+#              pi_lectura, pi_escritura (escala 0-5)
+# L2 (Español): media de si_expresion, si_comprension,
+#               si_lectura, si_escritura (escala 0-5)
+# 
+# Interpretación:
+#   - Valores positivos → dominancia Embera (L1 > L2)
+#   - Valores negativos → dominancia Español (L2 > L1)
+#   - Valores ≈ 0 → bilingüismo balanceado
+# 
+# Rango teórico: [-5, +5] (en la práctica más estrecho)
+
+cat("CONSTRUCCIÓN DE DOMINANCIA LINGÜÍSTICA\n")
+cat("═══════════════════════════════════════════════════════════\n\n")
+
+# Variables de competencia
+pi_vars <- c("pi_expresion", "pi_comprension", "pi_lectura", "pi_escritura")
+si_vars <- c("si_expresion", "si_comprension", "si_lectura", "si_escritura")
+
+cat("Variables L1 (Embera):", paste(pi_vars, collapse = ", "), "\n")
+cat("Variables L2 (Español):", paste(si_vars, collapse = ", "), "\n\n")
+
+# Forzar numérico (guard contra coerción de Excel)
+df <- df %>%
+  mutate(across(all_of(c(pi_vars, si_vars)), as.numeric))
+
+# Calcular promedios y dominancia
+df <- df %>%
+  rowwise() %>%
+  mutate(
+    l1_proficiency = mean(c_across(all_of(pi_vars)), na.rm = FALSE),
+    l2_proficiency = mean(c_across(all_of(si_vars)), na.rm = FALSE),
+    dom_L1L2       = l1_proficiency - l2_proficiency
+  ) %>%
+  ungroup()
+
+# ─── DESCRIPTIVOS ───────────────────────────────────────────
+
+cat("DESCRIPTIVOS\n")
+cat("───────────────────────────────────────────────────────────\n")
+
+cat("\nL1 proficiency (Embera, escala 0-5):\n")
+cat("  M  =", round(mean(df$l1_proficiency, na.rm = TRUE), 3), "\n")
+cat("  SD =", round(sd(df$l1_proficiency, na.rm = TRUE), 3), "\n")
+cat("  Rango: [", round(min(df$l1_proficiency, na.rm = TRUE), 3), ", ",
+    round(max(df$l1_proficiency, na.rm = TRUE), 3), "]\n", sep = "")
+cat("  NA count:", sum(is.na(df$l1_proficiency)), "\n\n")
+
+cat("L2 proficiency (Español, escala 0-5):\n")
+cat("  M  =", round(mean(df$l2_proficiency, na.rm = TRUE), 3), "\n")
+cat("  SD =", round(sd(df$l2_proficiency, na.rm = TRUE), 3), "\n")
+cat("  Rango: [", round(min(df$l2_proficiency, na.rm = TRUE), 3), ", ",
+    round(max(df$l2_proficiency, na.rm = TRUE), 3), "]\n", sep = "")
+cat("  NA count:", sum(is.na(df$l2_proficiency)), "\n\n")
+
+cat("dom_L1L2 (dominancia L1 - L2, rango teórico [-5, +5]):\n")
+cat("  M  =", round(mean(df$dom_L1L2, na.rm = TRUE), 3), "\n")
+cat("  SD =", round(sd(df$dom_L1L2, na.rm = TRUE), 3), "\n")
+cat("  Rango: [", round(min(df$dom_L1L2, na.rm = TRUE), 3), ", ",
+    round(max(df$dom_L1L2, na.rm = TRUE), 3), "]\n", sep = "")
+cat("  NA count:", sum(is.na(df$dom_L1L2)), "\n\n")
+
+# Interpretación
+n_l1_dom <- sum(df$dom_L1L2 > 0, na.rm = TRUE)
+n_l2_dom <- sum(df$dom_L1L2 < 0, na.rm = TRUE)
+n_balanced <- sum(abs(df$dom_L1L2) < 0.5, na.rm = TRUE)
+
+cat("Distribución de dominancia:\n")
+cat("  Dominancia L1 (Embera > Español):", n_l1_dom, 
+    "(", round(100 * n_l1_dom / nrow(df), 1), "%)\n")
+cat("  Dominancia L2 (Español > Embera):", n_l2_dom,
+    "(", round(100 * n_l2_dom / nrow(df), 1), "%)\n")
+cat("  Balanceados (|dom| < 0.5):", n_balanced,
+    "(", round(100 * n_balanced / nrow(df), 1), "%)\n\n")
+
+cat("✓ Construcción de dom_L1L2 completada\n")
+cat("═══════════════════════════════════════════════════════════\n")
+```
+
+```{r sf36-functions}
+# ============================================================
+# SF-36 SCORING — FUNCIONES DE RECODIFICACIÓN (RAND-36)
+# ============================================================
+# Algoritmo oficial: Hays, Sherbourne & Mazel (1993)
+# Validación hispana: Vilagut et al. (2005)
+# 
+# Todas las funciones transforman a escala 0-100 donde:
+#   - 0 = peor salud posible
+#   - 100 = mejor salud posible
+# 
+# Estrategia: cada bloque de ítems tiene su propia función
+# según el número de niveles y la polaridad.
+
+cat("DEFINIENDO FUNCIONES DE RECODIFICACIÓN SF-36\n")
+cat("═══════════════════════════════════════════════════════════\n\n")
+
+# ─── Función 1: 5 niveles, polaridad invertida ─────────────
+# Ítems: 1, 2, 20, 22, 34, 36
+# Original: 1=mejor, 5=peor → Invertir
+# Resultado: 1→100, 2→75, 3→50, 4→25, 5→0
+
+recode_5_inv <- function(x) {
+  c(100, 75, 50, 25, 0)[x]
+}
+
+# ─── Función 2: 3 niveles, mayor=mejor ─────────────────────
+# Ítems: 3-12 (Función Física)
+# Original: 1=muy limitado, 3=nada limitado
+# Resultado: 1→0, 2→50, 3→100
+
+recode_3_pos <- function(x) {
+  c(0, 50, 100)[x]
+}
+
+# ─── Función 3: 2 niveles (Sí/No) ──────────────────────────
+# Ítems: 13-19 (Rol Físico, Rol Emocional)
+# Original: 1=Sí (limita), 2=No (no limita)
+# Resultado: 1→0, 2→100
+
+recode_2 <- function(x) {
+  c(0, 100)[x]
+}
+
+# ─── Función 4: 6 niveles, positive-worded (invertir) ──────
+# Ítems: 21, 23, 26, 27, 30
+# Original: 1=todo el tiempo (mejor), 6=nunca (peor)
+# Resultado: 1→100, 2→80, 3→60, 4→40, 5→20, 6→0
+
+recode_6_inv <- function(x) {
+  c(100, 80, 60, 40, 20, 0)[x]
+}
+
+# ─── Función 5: 6 niveles, negative-worded (mantener) ──────
+# Ítems: 24, 25, 28, 29, 31
+# Original: 1=todo el tiempo (peor), 6=nunca (mejor)
+# Resultado: 1→0, 2→20, 3→40, 4→60, 5→80, 6→100
+
+recode_6_pos <- function(x) {
+  c(0, 20, 40, 60, 80, 100)[x]
+}
+
+# ─── Función 6: 5 niveles, mayor=mejor ─────────────────────
+# Ítems: 32, 33, 35
+# Original: 1=peor, 5=mejor
+# Resultado: 1→0, 2→25, 3→50, 4→75, 5→100
+
+recode_5_pos <- function(x) {
+  c(0, 25, 50, 75, 100)[x]
+}
+
+# ─── Verificación de funciones ─────────────────────────────
+
+cat("Funciones definidas:\n")
+cat("  1. recode_5_inv  → 5 niveles invertidos (1→100, 5→0)\n")
+cat("  2. recode_3_pos  → 3 niveles positivos (1→0, 3→100)\n")
+cat("  3. recode_2      → 2 niveles (1→0, 2→100)\n")
+cat("  4. recode_6_inv  → 6 niveles invertidos (1→100, 6→0)\n")
+cat("  5. recode_6_pos  → 6 niveles positivos (1→0, 6→100)\n")
+cat("  6. recode_5_pos  → 5 niveles positivos (1→0, 5→100)\n\n")
+
+# Test rápido de cada función
+cat("Test de funciones (entrada → salida):\n")
+cat("  recode_5_inv(c(1,3,5)) →", recode_5_inv(c(1,3,5)), "\n")
+cat("  recode_3_pos(c(1,2,3)) →", recode_3_pos(c(1,2,3)), "\n")
+cat("  recode_2(c(1,2))       →", recode_2(c(1,2)), "\n")
+cat("  recode_6_inv(c(1,3,6)) →", recode_6_inv(c(1,3,6)), "\n")
+cat("  recode_6_pos(c(1,3,6)) →", recode_6_pos(c(1,3,6)), "\n")
+cat("  recode_5_pos(c(1,3,5)) →", recode_5_pos(c(1,3,5)), "\n\n")
+
+cat("✓ Funciones de recodificación listas\n")
+cat("═══════════════════════════════════════════════════════════\n")
+```

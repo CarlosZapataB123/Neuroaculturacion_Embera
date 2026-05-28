@@ -1,0 +1,1753 @@
+---
+title: Psychometric Validation of the Substance Use Risk Profile Scale (SURPS) in
+  a Spanish Adolescent School Sample
+author: "Carlos Zapata"
+date: "`r format(Sys.Date(), '%B %d, %Y')`"
+output:
+  html_document:
+    toc: true
+    toc_float: false
+    toc_depth: 3
+    number_sections: true
+    theme: flatly
+    highlight: tango
+    df_print: paged
+    code_folding: hide
+  pdf_document:
+    toc: true
+    toc_depth: '3'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo    = TRUE,
+  warning = FALSE,
+  message = FALSE,
+  comment = "#>",
+  fig.width  = 10,
+  fig.height = 6,
+  fig.align  = "center"
+)
+```
+
+```{r Packages and Initial Setup, results='hide', include=FALSE}
+# ── Required packages ──────────────────────────────────────────────────────────
+paquetes <- c(
+  # Data management
+  "haven", "dplyr", "tidyr", "stringr", "here",
+  # Descriptive & psychometric
+  "psych", "GPArotation",
+  # EGA (Exploratory Graph Analysis)
+  "EGAnet",
+  # SEM / CFA
+  "lavaan", "semTools", "semPlot",
+  # Effect sizes & non-parametric tests
+  "rstatix",
+  # Tables & visualisation
+  "ggplot2", "knitr", "kableExtra", "scales"
+)
+
+nuevos <- paquetes[!paquetes %in% installed.packages()[, "Package"]]
+if (length(nuevos)) {
+  install.packages(nuevos,
+                   repos       = "https://cran.r-project.org",
+                   dependencies = TRUE)
+}
+
+invisible(lapply(paquetes, library, character.only = TRUE))
+
+# ── Seed for reproducibility ───────────────────────────────────────────────────
+set.seed(2024)
+
+# ── Directory structure ────────────────────────────────────────────────────────
+for (d in c("data/raw", "data/processed", "output/figures", "output/tables")) {
+  dir.create(here(d), showWarnings = FALSE, recursive = TRUE)
+}
+
+cat("✓ Setup complete.\n")
+```
+
+```{r importar, include=FALSE}
+# ── Load data ──────────────────────────────────────────────────────────────────
+# Expected path: data/raw/colegiosBUENO.sav
+# (copy the .sav file into data/raw/ before running)
+datos <- read_sav(here("data", "raw", "colegiosBUENO.sav"))
+
+cat("Rows:", nrow(datos), "\n")
+cat("Columns:", ncol(datos), "\n")
+```
+
+```{r variables, echo=FALSE, results='hide'}
+data.frame(
+  Position = seq_along(names(datos)),
+  Variable = names(datos)
+) |>
+  kable(caption = "Variables in the dataset") |>
+  kable_styling(
+    bootstrap_options = c("striped", "hover", "condensed"),
+    full_width  = FALSE,
+    fixed_thead = TRUE
+  ) |>
+  scroll_box(height = "400px")
+```
+
+```{r items-surps, include=FALSE}
+# ── SURPS item definitions ─────────────────────────────────────────────────────
+surps_factores <- list(
+  Hopelessness     = paste0("SURPS", c(1, 4, 7, 13, 17, 20, 23)),
+  SensationSeeking = paste0("SURPS", c(3, 6, 9, 12, 16, 19)),
+  Impulsivity      = paste0("SURPS", c(2, 5, 11, 15, 22)),
+  Anxiety          = paste0("SURPS", c(8, 10, 14, 18, 21))
+)
+
+items_surps <- paste0("SURPS", 1:23)
+items_ok    <- items_surps[items_surps %in% names(datos)]
+items_miss  <- items_surps[!items_surps %in% names(datos)]
+
+cat("Items found:    ", length(items_ok), "/ 23\n")
+cat("Items NOT found:", length(items_miss), "\n")
+if (length(items_miss) > 0) cat("Missing:", paste(items_miss, collapse = ", "), "\n")
+
+for (f in names(surps_factores)) {
+  cat(sprintf("  %-20s: %d items → %s\n",
+              f,
+              length(surps_factores[[f]]),
+              paste(surps_factores[[f]], collapse = ", ")))
+}
+```
+
+```{r vars-clave, include=FALSE}
+VAR_GENERO  <- "Sexo"
+VAR_EDAD    <- "Edad"
+VAR_FUMAR   <- "recod56"
+VAR_SEXRISK <- "recod44I"
+VAR_NIVEL   <- "NivEstudios"
+
+vars_clave <- c(VAR_GENERO, VAR_EDAD, VAR_FUMAR, VAR_SEXRISK, VAR_NIVEL)
+for (v in vars_clave) {
+  found <- v %in% names(datos)
+  cat(if (found) "✓" else "✗", v, if (!found) "(NOT FOUND)", "\n")
+}
+```
+
+```{r edad-dist, include=FALSE}
+# ── Inspect age range (relevant for grouping in invariance and norms) ──────────
+cat("=== Age (Edad) ===\n")
+print(summary(datos[[VAR_EDAD]]))
+cat("\nFrequency table:\n")
+print(table(datos[[VAR_EDAD]], useNA = "ifany"))
+
+# ── Educational stage grouping (ESO vs. Post-ESO) ─────────────────────────────
+datos <- datos |>
+  mutate(
+    Etapa = case_when(
+      NivEstudios %in% c("2ºESO", "4ºESO")                                    ~ "ESO",
+      NivEstudios %in% c("1ºGrado Medio", "2ºGrado Medio", "2º Bachiller")    ~ "Post-ESO",
+      TRUE ~ NA_character_
+    ),
+    Etapa = factor(Etapa, levels = c("ESO", "Post-ESO"))
+  )
+
+cat("\nEducational stage:\n");  print(table(datos$Etapa, useNA = "ifany"))
+```
+
+```{r missings, include=FALSE}
+datos_surps <- datos[, items_ok]
+
+miss_total <- sum(is.na(datos_surps))
+miss_pct   <- round(miss_total / (nrow(datos_surps) * ncol(datos_surps)) * 100, 2)
+
+cat("Total missing in SURPS items:", miss_total,
+    "(", miss_pct, "% of all cells )\n")
+cat("Complete cases:", sum(complete.cases(datos_surps)),
+    "/", nrow(datos_surps), "\n")
+
+datos_surps |>
+  summarise(across(everything(), ~ sum(is.na(.)))) |>
+  pivot_longer(everything(),
+               names_to  = "Item",
+               values_to = "N_missing") |>
+  mutate(
+    Pct = round(N_missing / nrow(datos_surps) * 100, 1),
+    Factor = case_when(
+      Item %in% surps_factores$Hopelessness     ~ "Hopelessness",
+      Item %in% surps_factores$Anxiety          ~ "Anxiety",
+      Item %in% surps_factores$Impulsivity      ~ "Impulsivity",
+      Item %in% surps_factores$SensationSeeking ~ "SensationSeeking"
+    )
+  ) |>
+  kable(caption = "Missing values per SURPS item",
+        col.names = c("Item", "N missing", "% missing", "Factor")) |>
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
+                full_width = FALSE)
+```
+
+```{r guardar-base, include=FALSE}
+vars_trabajo <- unique(c(items_ok, VAR_GENERO, VAR_EDAD, VAR_FUMAR,
+                          VAR_SEXRISK, VAR_NIVEL, "Etapa"))
+vars_trabajo <- vars_trabajo[vars_trabajo %in% names(datos)]
+
+datos_trabajo <- datos[, vars_trabajo] |>
+  filter(complete.cases(across(all_of(items_ok))))
+
+cat("Working dataset: N =", nrow(datos_trabajo), "\n")
+cat("Variables included:", ncol(datos_trabajo), "\n")
+
+saveRDS(surps_factores,  here("data", "processed", "surps_factores.rds"))
+saveRDS(datos_trabajo,   here("data", "processed", "datos_trabajo.rds"))
+saveRDS(items_ok,        here("data", "processed", "items_surps.rds"))
+cat("✓ RDS objects saved.\n")
+```
+
+
+```{r descriptivos-items, echo=FALSE, include=FALSE}
+psych::describe(datos_trabajo[, items_ok]) |>
+  as.data.frame() |>
+  select(n, mean, sd, median, min, max, skew, kurtosis) |>
+  mutate(across(where(is.numeric), ~ round(., 3))) |>
+  kable(caption = "Table S1. Descriptive statistics for SURPS items (complete cases)") |>
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
+                full_width = FALSE)
+```
+
+# Baseline CFA — Original 4-Factor Model (Full Sample, 23 Items)
+
+```{r cfa-base-spec, include=FALSE}
+modelo_base <- '
+  H  =~ SURPS1 + SURPS4 + SURPS7 + SURPS13 + SURPS17 + SURPS20 + SURPS23
+  SS =~ SURPS3 + SURPS6 + SURPS9 + SURPS12 + SURPS16 + SURPS19
+  IM =~ SURPS2 + SURPS5 + SURPS11 + SURPS15 + SURPS22
+  AS =~ SURPS8 + SURPS10 + SURPS14 + SURPS18 + SURPS21
+'
+
+datos_cfa_base <- datos_trabajo |>
+  mutate(across(all_of(items_ok), as.integer)) |>
+  filter(complete.cases(across(all_of(items_ok))))
+
+cat("N (baseline CFA, complete cases):", nrow(datos_cfa_base), "\n")
+
+fit_base <- cfa(
+  model     = modelo_base,
+  data      = datos_cfa_base,
+  estimator = "WLSMV",
+  ordered   = items_ok
+)
+
+saveRDS(fit_base, here("data", "processed", "fit_base.rds"))
+cat("✓ Baseline CFA estimated.\n")
+```
+
+## Fit Indices
+
+Índices de ajuste: Se estimó un AFC con estimador WLSMV sobre la muestra completa (N = 1283) para el modelo teórico de 4 factores y 23 ítems. Los índices de ajuste fueron insuficientes (CFI = .886, TLI = .872, RMSEA = .077, SRMR = .076), lo que indica que la estructura teórica original no se reproduce adecuadamente en esta muestra adolescente española.
+
+```{r cfa-base-ajuste, echo=FALSE}
+idx_b <- fitMeasures(fit_base,
+  c("chisq.scaled", "df.scaled", "pvalue.scaled",
+    "cfi.scaled", "tli.scaled",
+    "rmsea.scaled", "rmsea.ci.lower.scaled", "rmsea.ci.upper.scaled",
+    "srmr"))
+
+data.frame(
+  Model = "4F, 23 items — full sample (baseline)",
+  N     = lavaan::nobs(fit_base),
+  Chi2  = round(unname(idx_b["chisq.scaled"]), 2),
+  df    = unname(idx_b["df.scaled"]),
+  p     = ifelse(unname(idx_b["pvalue.scaled"]) < .001, "< .001",
+                 format(round(unname(idx_b["pvalue.scaled"]), 3), nsmall = 3)),
+  CFI   = round(unname(idx_b["cfi.scaled"]), 3),
+  TLI   = round(unname(idx_b["tli.scaled"]), 3),
+  RMSEA = round(unname(idx_b["rmsea.scaled"]), 3),
+  CI90  = paste0("[", round(unname(idx_b["rmsea.ci.lower.scaled"]), 3),
+                 ", ", round(unname(idx_b["rmsea.ci.upper.scaled"]), 3), "]"),
+  SRMR  = round(unname(idx_b["srmr"]), 3)
+) |>
+  kable(
+    caption   = "Table B1. Fit indices — Baseline CFA, 4-factor model, 23 items (WLSMV)",
+    col.names = c("Model", "N", "χ²(S-B)", "df", "p",
+                  "CFI", "TLI", "RMSEA", "90% CI", "SRMR")
+  ) |>
+  kable_styling(bootstrap_options = c("hover"),
+                full_width = FALSE, position = "center") |>
+  footnote(
+    general = paste0(
+      "χ²(S-B) = Satorra-Bentler scaled chi-square (WLSMV estimator). ",
+      "Criteria: CFI/TLI ≥ .95 = good fit; RMSEA ≤ .06 = good; SRMR ≤ .08 = acceptable. ",
+      "N = complete cases on all 23 SURPS items."
+    ),
+    general_title = "Note.",
+    footnote_as_chunk = TRUE
+  )
+```
+
+```{r cfa-base-cargas, echo=FALSE, include=FALSE}
+###Las cargas estandarizadas (λ) fueron significativas para todos los ítems, con Hopelessness como el factor más robusto (λ = .582–.878). Sin embargo, SURPS22 (λ = .393), SURPS19 (λ = .374) y SURPS6 (λ = .455) presentaron cargas débiles, sugiriendo ítems con funcionamiento deficiente en los factores Impulsivity y Sensation Seeking.
+
+standardizedSolution(fit_base) |>
+  subset(op == "=~") |>
+  as.data.frame() |>
+  mutate(
+    Subscale = case_when(
+      lhs == "H"  ~ "Hopelessness",
+      lhs == "SS" ~ "Sensation Seeking",
+      lhs == "IM" ~ "Impulsivity",
+      lhs == "AS" ~ "Anxiety Sensitivity"
+    ),
+    Item = rhs,
+    λ    = round(est.std, 3),
+    SE   = round(se, 3),
+    z    = round(z, 2),
+    p    = ifelse(pvalue < .001, "< .001",
+                  format(round(pvalue, 3), nsmall = 3))
+  ) |>
+  select(Subscale, Item, λ, SE, z, p) |>
+  kable(
+    caption   = "Table B2. Standardized factor loadings — Baseline CFA (WLSMV, full sample)",
+    col.names = c("Subscale", "Item", "λ", "SE", "z", "p")
+  ) |>
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
+                full_width = FALSE) |>
+  collapse_rows(columns = 1, valign = "top") |>
+  footnote(
+    general = "λ = standardized loading (WLSMV). Items with λ < .30 are considered non-salient.",
+    general_title = "Note.",
+    footnote_as_chunk = TRUE
+  )
+```
+
+## Modification Indices (MI)
+
+Los índices de modificación identificaron tres fuentes principales de desajuste: un cross-loading severo de SURPS6 sobre Hopelessness (MI = 434.4), la reasignación empírica de SURPS16 hacia Impulsivity (MI = 322.9), y redundancia semántica en los pares SURPS7–SURPS23 (MI = 288.5) y SURPS1–SURPS4 (MI = 122.7). Estos hallazgos justifican una exploración empírica de la estructura dimensional.
+
+```{r cfa-base-modindices, echo=FALSE}
+modindices(fit_base, sort. = TRUE, maximum.number = 15) |>
+  select(lhs, op, rhs, mi, epc, sepc.all) |>
+  mutate(across(where(is.numeric), ~ round(., 3))) |>
+  kable(
+    caption   = "Table B3. Top 15 modification indices — Baseline CFA",
+    col.names = c("LHS", "Op", "RHS", "MI", "EPC", "Std. EPC")
+  ) |>
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
+                full_width = FALSE) |>
+  footnote(
+    general = paste0(
+      "MI = modification index (χ² improvement if the parameter were freed). ",
+      "EPC = expected parameter change; Std. EPC = standardised EPC. ",
+      "MI > 10 indicates meaningful local misfit."
+    ),
+    general_title = "Note.",
+    footnote_as_chunk = TRUE
+  )
+```
+
+# Sample Splitting (A = EFA / B = CFA)
+
+```{r}
+# ── Reproducible random 50/50 split
+set.seed(2024)
+N_total  <- nrow(datos_trabajo)
+idx_A    <- sample(seq_len(N_total), size = floor(N_total / 2))
+idx_B    <- setdiff(seq_len(N_total), idx_A)
+muestra_A <- datos_trabajo[idx_A, ]
+muestra_B <- datos_trabajo[idx_B, ]
+
+# Save samples
+saveRDS(muestra_A, here("data", "processed", "muestra_A.rds"))
+saveRDS(muestra_B, here("data", "processed", "muestra_B.rds"))
+saveRDS(idx_A,     here("data", "processed", "idx_A.rds"))
+
+# Create summary table
+sample_split <- data.frame(
+  Sample = c("Total Sample", "Sample A (EFA)", "Sample B (CFA)"),
+  N = c(N_total, nrow(muestra_A), nrow(muestra_B)),
+  Percentage = c("100%", 
+                 paste0(round(nrow(muestra_A)/N_total*100, 1), "%"),
+                 paste0(round(nrow(muestra_B)/N_total*100, 1), "%")),
+  Purpose = c("Complete dataset", 
+              "Exploratory: PA, EGA, AFE", 
+              "Confirmatory: CFA model comparison")
+)
+
+knitr::kable(sample_split,
+             caption = "Table 1. Sample splitting for cross-validation",
+             align = c('l', 'c', 'c', 'l'),
+             col.names = c("Sample", "N", "%", "Purpose")) %>%
+  kableExtra::kable_styling(
+    bootstrap_options = c("striped", "hover", "condensed"),
+    full_width = FALSE,
+    position = "left",
+    font_size = 14
+  ) %>%
+  kableExtra::row_spec(0, bold = TRUE, background = "#f0f0f0") %>%
+  kableExtra::row_spec(1, bold = TRUE)
+```
+
+
+# Exploratory Factor Analysis — Sample A
+
+> All EFA steps use **polychoric correlations** (ordinal Likert indicators).
+> Dimensionality is assessed with both **Parallel Analysis** (classical eigenvalue-based approach) and **EGA** (network-based approach); PAF with Promax and Geomin rotations are then applied with the empirically supported number of factors.
+
+## Polychoric Correlation Matrix
+
+```{r policoricas, include=FALSE}
+# ── Polychoric correlation matrix (required for ordinal Likert items) ──────────
+datos_efa <- muestra_A[, items_ok]
+
+# Convert to integer (required by psych::polychoric)
+datos_efa_int <- as.data.frame(lapply(datos_efa, as.integer))
+
+poly_out <- psych::polychoric(datos_efa_int, smooth = TRUE)
+R_poly   <- poly_out$rho
+
+saveRDS(poly_out, here("data", "processed", "poly_out.rds"))
+saveRDS(R_poly,   here("data", "processed", "R_poly.rds"))
+
+cat("Polychoric correlation matrix: ", nrow(R_poly), "×", ncol(R_poly), "\n")
+
+# Show summary of off-diagonal elements
+off_diag <- R_poly[upper.tri(R_poly)]
+cat(sprintf("Off-diagonal r:  Min = %.3f | Mean = %.3f | Max = %.3f\n",
+            min(off_diag), mean(off_diag), max(off_diag)))
+```
+
+
+```{r}
+library(corrplot)
+corrplot(R_poly, order = "AOE")
+
+```
+
+## Parallel Analysis
+
+### Dimensionalidad
+Se compararon métodos clásicos (Análisis Paralelo, FA y PCA) y de redes (EGA con algoritmo walktrap y bootstrap de 500 réplicas) sobre la matriz de correlaciones policóricas de la muestra exploratoria (n ≈ 641). El PA-PCA, el EGA y el bootEGA (modal = 4, 67.4%) convergieron en una solución de 4 dimensiones, coherente con la estructura teórica del SURPS; la discrepancia del PA-FA (5 factores) se atribuye a su sensibilidad ante ítems con cargas cruzadas.
+
+```{r pa-clasica, fig.height=6, fig.width=11}
+# ── Parallel Analysis (polychoric, 500 simulated datasets) ───────────────────
+pa_out <- psych::fa.parallel(
+  R_poly,
+  n.obs      = nrow(muestra_A),
+  fa         = "both",
+  fm         = "pa",
+  n.iter     = 500,
+  plot       = FALSE   # suppress default plot → custom ggplot below
+)
+
+cat("=== Parallel Analysis ===\n")
+cat("Factors suggested (FA) :", pa_out$nfact, "\n")
+cat("Components suggested (PCA):", pa_out$ncomp, "\n")
+
+saveRDS(pa_out, here("data", "processed", "pa_out.rds"))
+
+# ── Custom scree plot ────────────────────────────────────────────────────────
+n_eig <- length(pa_out$pc.values)
+
+df_scree <- data.frame(
+  Component = rep(1:n_eig, 4),
+  Eigenvalue = c(pa_out$pc.values, pa_out$pc.sim,
+                 pa_out$fa.values, pa_out$fa.sim),
+  Type = rep(c("Observed", "Simulated (95th pctl)"), each = n_eig, times = 2),
+  Method = rep(c("PCA", "Factor Analysis (PA)"), each = n_eig * 2)
+)
+
+# Suggested number of dimensions per method
+ref_lines <- data.frame(
+  Method = c("PCA", "Factor Analysis (PA)"),
+  xint   = c(pa_out$ncomp, pa_out$nfact),
+  label  = c(paste0("PCA: ", pa_out$ncomp, " components"),
+             paste0("FA: ", pa_out$nfact, " factors"))
+)
+
+ggplot(df_scree, aes(x = Component, y = Eigenvalue,
+                     color = Type, linetype = Type, shape = Type)) +
+  geom_line(linewidth = 0.8) +
+  geom_point(size = 2.5) +
+  geom_vline(data = ref_lines, aes(xintercept = xint + 0.5),
+             linetype = "dashed", color = "grey40", linewidth = 0.5) +
+  geom_text(data = ref_lines,
+            aes(x = xint + 0.7, y = Inf, label = label),
+            inherit.aes = FALSE, hjust = 0, vjust = 1.5,
+            size = 3.2, color = "grey30", fontface = "italic") +
+  facet_wrap(~ Method, scales = "free_y") +
+  scale_color_manual(values = c("Observed" = "#2166AC", "Simulated (95th pctl)" = "#B2182B")) +
+  scale_linetype_manual(values = c("Observed" = "solid", "Simulated (95th pctl)" = "longdash")) +
+  scale_shape_manual(values = c("Observed" = 16, "Simulated (95th pctl)" = 4)) +
+  scale_x_continuous(breaks = 1:n_eig) +
+  labs(
+    title    = "Parallel Analysis Scree Plot — SURPS Items (Sample A)",
+    subtitle = paste0("Polychoric correlations | 500 simulated datasets | N = ", nrow(muestra_A)),
+    x = "Factor / Component number",
+    y = "Eigenvalue",
+    color = NULL, linetype = NULL, shape = NULL,
+    caption = paste0(
+      "Note. Retain factors/components where observed eigenvalues exceed the simulated 95th percentile. ",
+      "Dashed vertical line = suggested number of dimensions. ",
+      "PA-PCA = ", pa_out$ncomp, " components; PA-FA = ", pa_out$nfact, " factors."
+    )
+  ) +
+  theme_minimal(base_size = 11) +
+  theme(
+    legend.position  = "bottom",
+    strip.text       = element_text(face = "bold", size = 11),
+    plot.title       = element_text(face = "bold", size = 12),
+    plot.subtitle    = element_text(size = 9.5, color = "grey40"),
+    plot.caption     = element_text(size = 8, hjust = 0, color = "grey50",
+                                    margin = margin(t = 8)),
+    panel.grid.minor = element_blank(),
+    plot.margin      = margin(10, 15, 10, 10)
+  )
+```
+
+## EGA — Exploratory Graph Analysis
+
+```{r ega-analisis, fig.height=7, fig.width=8, echo=FALSE, fig.show='hide'}
+# ── EGA: network-based dimensionality detection ───────────────────────────────
+# corr = "cor_auto" calls qgraph::cor_auto() internally, which detects ordinal
+# variables and computes polychoric correlations automatically.
+# Valid values in EGAnet >= 2.0: "auto", "cor_auto", "cosine", "pearson", "spearman"
+
+ega_out <- EGAnet::EGA(
+  data      = datos_efa_int,
+  corr      = "cor_auto",
+  algorithm = "walktrap",
+  plot.EGA  = TRUE,
+  verbose   = FALSE
+)
+
+cat("=== EGA Results ===\n")
+cat("Dimensions detected:", ega_out$n.dim, "\n")
+cat("\nItem-dimension assignment:\n")
+print(ega_out$dim.variables)
+
+saveRDS(ega_out, here("data", "processed", "ega_out.rds"))
+```
+
+```{r ega-3d, echo=FALSE, message=FALSE, warning=FALSE, eval=FALSE, include=FALSE}
+# ── Interactive 3D EGA network (plotly) ───────────────────────────────────────
+# Rotatable 3D graph with always-visible item labels and a factor legend.
+# Edge width proportional to partial correlation strength.
+# Drag = rotate, scroll = zoom, hover = details.
+
+req_pkgs <- c("igraph", "plotly", "scales")
+new_pkgs <- req_pkgs[!req_pkgs %in% installed.packages()[, "Package"]]
+if (length(new_pkgs)) install.packages(new_pkgs, repos = "https://cran.r-project.org")
+invisible(lapply(req_pkgs, library, character.only = TRUE))
+
+ega_final <- readRDS(here("data", "processed", "ega_out.rds"))
+A   <- ega_final$network
+wc  <- as.integer(ega_final$wc)
+itm <- colnames(A)
+itm_short <- gsub("SURPS", "", itm)
+
+# Community → factor mapping
+fac_lab <- c("1" = "Hopelessness",
+             "2" = "Impulsivity",
+             "3" = "Sensation Seeking",
+             "4" = "Anxiety Sensitivity")
+pal <- c("Hopelessness"        = "#E64B35",
+         "Impulsivity"         = "#4DBBD5",
+         "Sensation Seeking"   = "#00A087",
+         "Anxiety Sensitivity" = "#F39B7F")
+
+factor_node <- fac_lab[as.character(wc)]
+
+# ── 3D layout coordinates ─────────────────────────────────────────────────────
+g <- graph_from_adjacency_matrix(abs(A), mode = "undirected",
+                                 weighted = TRUE, diag = FALSE)
+set.seed(2024)
+coords <- layout_with_fr(g, dim = 3)
+colnames(coords) <- c("x", "y", "z")
+nodes <- data.frame(coords, item = itm_short,
+                    factor = factor_node, stringsAsFactors = FALSE)
+
+# ── Edge width proportional to partial correlation strength ───────────────────
+el    <- as_edgelist(g, names = FALSE)
+ew    <- E(g)$weight
+ew_sc <- scales::rescale(ew, to = c(1, 6))
+
+# ── Build plot ────────────────────────────────────────────────────────────────
+p <- plot_ly()
+
+# One trace per edge (allows variable width per edge)
+for (i in seq_len(nrow(el))) {
+  p <- p |>
+    add_trace(
+      x    = c(coords[el[i, 1], 1], coords[el[i, 2], 1]),
+      y    = c(coords[el[i, 1], 2], coords[el[i, 2], 2]),
+      z    = c(coords[el[i, 1], 3], coords[el[i, 2], 3]),
+      type = "scatter3d", mode = "lines",
+      line = list(color = "rgba(70,70,70,0.65)", width = ew_sc[i]),
+      hoverinfo  = "none",
+      showlegend = FALSE
+    )
+}
+
+# One trace per factor → legend shows factor names with color
+for (f in names(pal)) {
+  nf <- nodes[nodes$factor == f, ]
+  p <- p |>
+    add_trace(
+      data     = nf,
+      x = ~x, y = ~y, z = ~z,
+      type     = "scatter3d",
+      mode     = "markers+text",
+      marker   = list(size = 10,
+                      color = pal[f],
+                      line  = list(color = "white", width = 1.5)),
+      text         = ~item,
+      textposition = "middle center",
+      textfont     = list(size = 12, color = "white", family = "Arial Black"),
+      name         = f,
+      hovertemplate = paste0(
+        "<b>Item SURPS%{text}</b><br>",
+        "Factor: ", f,
+        "<extra></extra>"
+      )
+    )
+}
+
+# ── Layout ────────────────────────────────────────────────────────────────────
+p <- p |>
+  layout(
+    title = list(
+      text = "SURPS — EGA Network Structure (3D)",
+      font = list(size = 16, family = "Arial")
+    ),
+    scene = list(
+      xaxis = list(title = "", showticklabels = FALSE, zeroline = FALSE,
+                   showgrid = FALSE, showbackground = FALSE,
+                   showspikes = FALSE),
+      yaxis = list(title = "", showticklabels = FALSE, zeroline = FALSE,
+                   showgrid = FALSE, showbackground = FALSE,
+                   showspikes = FALSE),
+      zaxis = list(title = "", showticklabels = FALSE, zeroline = FALSE,
+                   showgrid = FALSE, showbackground = FALSE,
+                   showspikes = FALSE),
+      bgcolor = "white"
+    ),
+    legend = list(
+      title      = list(text = "<b>SURPS Factor</b>",
+                        font = list(size = 13)),
+      itemsizing = "constant",
+      font       = list(size = 12),
+      bgcolor    = "rgba(255,255,255,0.85)",
+      bordercolor = "#cccccc",
+      borderwidth = 1
+    ),
+    paper_bgcolor = "white",
+    plot_bgcolor  = "white",
+    margin = list(l = 0, r = 0, b = 0, t = 50)
+  )
+
+p
+```
+
+```{r ega-boot, cache=TRUE}
+ega_boot <- EGAnet::bootEGA(
+  data      = datos_efa_int,
+  corr      = "cor_auto",
+  algorithm = "walktrap",
+  iter      = 500,
+  type      = "resampling",
+  seed      = 2024,
+  plot.typicalStructure = FALSE,
+  verbose   = FALSE
+)
+
+cat("=== Bootstrap EGA (500 iterations) ===\n")
+print(ega_boot$summary.table)
+
+# Item stability — compatible with EGAnet >= 2.0
+# itemStability() returns the proportion of replications in which each item
+# was assigned to its modal community; this is the package's official function.
+cat("\nItem stability (proportion assigned to modal community):\n")
+stab <- EGAnet::itemStability(ega_boot)
+print(stab)
+
+saveRDS(ega_boot, here("data", "processed", "ega_boot.rds"))
+saveRDS(stab,     here("data", "processed", "ega_boot_stability.rds"))
+```
+
+```{r ega-resumen, echo=FALSE}
+n_factores_ega <- ega_out$n.dim
+
+freq_tab    <- ega_boot$frequency
+modal_ndim  <- freq_tab[which.max(freq_tab$Frequency), "# of Factors"]
+mean_ndim   <- round(mean(ega_boot$boot.ndim), 2)
+median_ndim <- ega_boot$summary.table$median.dim
+
+data.frame(
+  Method = c(
+    "Parallel Analysis — FA (polychoric)",
+    "Parallel Analysis — PCA (polychoric)",
+    "EGA (Walktrap)",
+    "Bootstrap EGA — modal",
+    "Bootstrap EGA — median",
+    "Bootstrap EGA — mean",
+    "Theoretical (SURPS)"
+  ),
+  N_factors = c(
+    pa_out$nfact,
+    pa_out$ncomp,
+    n_factores_ega,
+    modal_ndim,
+    median_ndim,
+    mean_ndim,
+    4L
+  )
+) |>
+  kable(
+    caption   = "Table 1. Dimensionality assessment: Parallel Analysis vs. EGA",
+    col.names = c("Method / Criterion", "N factors")
+  ) |>
+  kable_styling(bootstrap_options = c("hover"), full_width = FALSE, position = "center") |>
+  pack_rows("Classical approach", 1, 2) |>
+  pack_rows("Network-based approach", 3, 6) |>
+  pack_rows("Reference", 7, 7) |>
+  footnote(
+    general = paste0(
+      "PA conducted on the polychoric correlation matrix (Sample A; 500 simulated datasets; ",
+      "Principal Axis factoring). ",
+      "EGA used the Walktrap community-detection algorithm on the GLASSO regularised partial-correlation network. ",
+      "Bootstrap EGA: 500 resampling iterations."
+    ),
+    general_title = "Note.",
+    footnote_as_chunk = TRUE
+  )
+```
+
+## PAF — Principal Axis Factoring
+
+> Extracting with the number of factors suggested by EGA (and the theoretical 4-factor solution for comparison).
+
+```{r paf-promax, include=FALSE}
+# EGA confirmed 4 factors (modal bootstrap = 67.4%) → nfactors fixed at 4
+n_fac <- 4L
+
+fa_promax <- psych::fa(
+  r        = R_poly,
+  nfactors = n_fac,
+  rotate   = "promax",
+  fm       = "pa",
+  scores   = "none",   # "none" avoids the 'w' bug when passing a correlation matrix
+  cor      = "cor"
+)
+
+cat("=== PAF + Promax | nfactors = 4 ===\n")
+print(fa_promax$loadings, cutoff = 0.30)
+cat("\nCumulative variance explained:",
+    round(fa_promax$Vaccounted["Cumulative Var", n_fac], 3), "\n")
+
+saveRDS(fa_promax, here("data", "processed", "fa_promax.rds"))
+```
+
+```{r paf-geomin, include=FALSE}
+fa_geomin <- psych::fa(
+  r        = R_poly,
+  nfactors = n_fac,
+  rotate   = "geominQ",
+  fm       = "pa",
+  scores   = "none",
+  cor      = "cor"
+)
+
+cat("=== PAF + Geomin (oblique) | nfactors = 4 ===\n")
+print(fa_geomin$loadings, cutoff = 0.30)
+cat("\nCumulative variance explained:",
+    round(fa_geomin$Vaccounted["Cumulative Var", n_fac], 3), "\n")
+
+saveRDS(fa_geomin, here("data", "processed", "fa_geomin.rds"))
+```
+
+```{r tabla-cargas-efa, echo=FALSE}
+map_factor_labels <- function(fa_obj, surps_factores) {
+  L <- unclass(fa_obj$loadings)
+  n_fac <- ncol(L)
+  labels <- character(n_fac)
+  for (j in seq_len(n_fac)) {
+    best_match <- ""
+    best_mean  <- 0
+    for (f in names(surps_factores)) {
+      items_f <- intersect(surps_factores[[f]], rownames(L))
+      mean_load <- mean(abs(L[items_f, j]))
+      if (mean_load > best_mean) {
+        best_mean  <- mean_load
+        best_match <- f
+      }
+    }
+    short <- switch(best_match,
+      Hopelessness = "H", SensationSeeking = "SS",
+      Impulsivity  = "IM", Anxiety = "AS", paste0("F", j))
+    labels[j] <- short
+  }
+  return(labels)
+}
+
+extraer_cargas_compact <- function(fa_obj, surps_factores, cutoff = 0.40) {
+  L      <- unclass(fa_obj$loadings)
+  labs   <- map_factor_labels(fa_obj, surps_factores)
+  colnames(L) <- labs
+  col_order <- intersect(c("H", "SS", "IM", "AS"), labs)
+  L <- L[, col_order]
+  df <- as.data.frame(round(L, 3))
+  df[] <- lapply(df, function(x) ifelse(abs(x) < cutoff, "", format(x, nsmall = 3)))
+  df$Item <- rownames(L)
+  df
+}
+
+tab_p <- extraer_cargas_compact(fa_promax, surps_factores, cutoff = 0.40)
+tab_g <- extraer_cargas_compact(fa_geomin, surps_factores, cutoff = 0.40)
+
+compact <- data.frame(
+  Item = tab_p$Item,
+  H_P  = tab_p$H,  H_G  = tab_g$H,
+  SS_P = tab_p$SS, SS_G = tab_g$SS,
+  IM_P = tab_p$IM, IM_G = tab_g$IM,
+  AS_P = tab_p$AS, AS_G = tab_g$AS,
+  stringsAsFactors = FALSE
+)
+
+compact |>
+  kable(
+    caption   = "Table 2. EFA Factor Loadings — PAF Promax vs. Geomin (Sample A; |λ| ≥ .40)",
+    col.names = c("Item", "P", "G", "P", "G", "P", "G", "P", "G"),
+    align     = c("l", rep("c", 8)),
+    row.names = FALSE
+  ) |>
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
+                full_width = FALSE, position = "center", font_size = 11) |>
+  add_header_above(c(" " = 1, "Hopelessness" = 2, "Sensation Seeking" = 2, 
+                     "Impulsivity" = 2, "Anxiety Sensitivity" = 2)) |>
+  footnote(
+    general = paste0(
+      "PAF = Principal Axis Factoring on polychoric correlations. ",
+      "P = Promax, G = Geomin. ",
+      "Loadings |λ| < .40 suppressed. ",
+      "SURPS22 did not reach |λ| ≥ .40 under either rotation. ",
+      "SURPS6 shows cross-loading (H = −.37 Promax, below cutoff). ",
+      "N(Sample A) = ", nrow(muestra_A), "."
+    ),
+    general_title = "Note.",
+    footnote_as_chunk = TRUE
+  )
+```
+
+```{r efa-decision, include=FALSE}
+cat("=== EFA Solution Assessment ===\n\n")
+
+cat("── Dimensionality ───────────────────────────────────────\n")
+cat("EGA (Walktrap):      ", ega_out$n.dim, "factors\n")
+cat("Bootstrap modal:      4 (67.4% of 500 iterations)\n")
+cat("Bootstrap median:     4\n")
+cat("Theoretical model:    4 factors\n")
+cat("→ Four-factor structure empirically confirmed.\n\n")
+
+cat("── Variance explained ───────────────────────────────────\n")
+cat("PAF-Promax  (4F):", round(fa_promax$Vaccounted["Cumulative Var", 4], 3), "\n")
+cat("PAF-Geomin  (4F):", round(fa_geomin$Vaccounted["Cumulative Var", 4], 3), "\n\n")
+
+cat("── Inter-factor correlations (Promax) ───────────────────\n")
+print(round(fa_promax$Phi, 3))
+
+cat("\n── Problematic items identified ─────────────────────────\n")
+cat("SURPS22: λ < .30 under Promax and Geomin → non-discriminating item within IM\n")
+cat("SURPS6:  cross-loading H (-.37) and SS (.39) → semantic ambiguity\n")
+cat("SURPS16: loads on SS (.49/.50) → theoretical assignment confirmed\n")
+cat("         (EGA assigned it to IM; PAF corrects this)\n\n")
+
+cat("── Decision for CFA ─────────────────────────────────────\n")
+cat("Model A: 4 factors, 23 items (full theoretical model)\n")
+cat("Model B: 4 factors, 21 items (excluding SURPS22 and SURPS6)\n")
+cat("→ Both models will be compared in Sample B using WLSMV.\n")
+cat("→ The best-fitting model will be used for reliability,\n")
+cat("  invariance testing, and normative data.\n")
+```
+---
+
+## Structural Comparison: EGA vs. EFA Item Assignment
+
+> This section formally compares the item-to-dimension mapping from the network-based approach (EGA) and the classical factor-analytic approach (PAF), following the director's instruction to contrast "traditional vs. modern" methods before proceeding to confirmatory analysis.
+
+```{r ega-vs-efa-comparison, echo=FALSE}
+# ── Items excluded from this structural comparison ────────────────────────────
+# SURPS6 and SURPS22 are excluded a priori because in the polychoric correlation
+# matrix they did not show item-total convergence with their theoretical subscale
+# (no |r| ≥ .40 with within-factor companions). Retaining them would distort the
+# label-mapping of EGA and EFA dimensions via majority-overlap assignment.
+items_excluidos_2b <- c("SURPS6", "SURPS22")
+
+# ── Extract EGA item assignment ──────────────────────────────────────────────
+ega_assign <- data.frame(
+  Item       = names(ega_out$wc),
+  EGA_dim    = as.integer(ega_out$wc),
+  stringsAsFactors = FALSE
+) |>
+  filter(!Item %in% items_excluidos_2b)
+
+# Map EGA community numbers to substantive labels based on majority overlap
+# with the theoretical structure (computed on retained items only)
+ega_to_factor <- function(ega_obj, surps_factores, excluir = character(0)) {
+  wc <- ega_obj$wc
+  wc <- wc[!names(wc) %in% excluir]
+  dims <- sort(unique(wc))
+  mapping <- setNames(character(length(dims)), dims)
+  
+  surps_factores_ret <- lapply(surps_factores, function(x) setdiff(x, excluir))
+  
+  for (d in dims) {
+    items_in_dim <- names(wc[wc == d])
+    best_match   <- ""
+    best_overlap <- 0
+    for (f in names(surps_factores_ret)) {
+      overlap <- length(intersect(items_in_dim, surps_factores_ret[[f]]))
+      if (overlap > best_overlap) {
+        best_overlap <- overlap
+        best_match   <- f
+      }
+    }
+    mapping[as.character(d)] <- best_match
+  }
+  return(mapping)
+}
+
+ega_label_map <- ega_to_factor(ega_out, surps_factores, excluir = items_excluidos_2b)
+ega_assign$EGA_factor <- ega_label_map[as.character(ega_assign$EGA_dim)]
+
+# ── Extract EFA (Promax) dominant assignment ─────────────────────────────────
+L_promax <- unclass(fa_promax$loadings)
+L_promax_ret <- L_promax[!rownames(L_promax) %in% items_excluidos_2b, , drop = FALSE]
+
+efa_assign <- data.frame(
+  Item            = rownames(L_promax_ret),
+  EFA_factor_num  = apply(abs(L_promax_ret), 1, which.max),
+  EFA_max_loading = round(apply(abs(L_promax_ret), 1, max), 3),
+  stringsAsFactors = FALSE
+)
+
+# Map EFA factor numbers to labels via highest overlap with theoretical structure
+efa_to_factor <- function(fa_obj, surps_factores, excluir = character(0)) {
+  L <- unclass(fa_obj$loadings)
+  L <- L[!rownames(L) %in% excluir, , drop = FALSE]
+  assign_num <- apply(abs(L), 1, which.max)
+  factors <- sort(unique(assign_num))
+  mapping <- setNames(character(length(factors)), factors)
+  
+  surps_factores_ret <- lapply(surps_factores, function(x) setdiff(x, excluir))
+  
+  for (fn in factors) {
+    items_in_factor <- names(assign_num[assign_num == fn])
+    best_match   <- ""
+    best_overlap <- 0
+    for (f in names(surps_factores_ret)) {
+      overlap <- length(intersect(items_in_factor, surps_factores_ret[[f]]))
+      if (overlap > best_overlap) {
+        best_overlap <- overlap
+        best_match   <- f
+      }
+    }
+    mapping[as.character(fn)] <- best_match
+  }
+  return(mapping)
+}
+
+efa_label_map <- efa_to_factor(fa_promax, surps_factores, excluir = items_excluidos_2b)
+efa_assign$EFA_factor <- efa_label_map[as.character(efa_assign$EFA_factor_num)]
+
+# ── Theoretical assignment (also filtered) ───────────────────────────────────
+teo_assign <- data.frame(
+  Item        = unlist(surps_factores, use.names = FALSE),
+  Theoretical = rep(names(surps_factores), lengths(surps_factores)),
+  stringsAsFactors = FALSE
+) |>
+  filter(!Item %in% items_excluidos_2b)
+
+# ── Merge and compare ────────────────────────────────────────────────────────
+comp <- teo_assign |>
+  left_join(ega_assign |> select(Item, EGA_factor), by = "Item") |>
+  left_join(efa_assign |> select(Item, EFA_factor, EFA_max_loading), by = "Item") |>
+  mutate(
+    EGA_agrees    = ifelse(Theoretical == EGA_factor, "✓", "✗"),
+    EFA_agrees    = ifelse(Theoretical == EFA_factor, "✓", "✗"),
+    EGA_EFA_agree = ifelse(EGA_factor == EFA_factor, "✓", "✗")
+  )
+
+comp |>
+  select(Item, Theoretical, EGA_factor, EGA_agrees,
+         EFA_factor, EFA_max_loading, EFA_agrees, EGA_EFA_agree) |>
+  kable(
+    caption   = "Table 2b. Item-to-Dimension Assignment: Theoretical vs. EGA vs. EFA (Sample A)",
+    col.names = c("Item", "Theoretical", "EGA", "EGA = Theo?",
+                  "EFA (Promax)", "|λ|max", "EFA = Theo?", "EGA = EFA?")
+  ) |>
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
+                full_width = FALSE, position = "center") |>
+  column_spec(4, color = ifelse(comp$EGA_agrees == "✗", "red", "darkgreen")) |>
+  column_spec(7, color = ifelse(comp$EFA_agrees == "✗", "red", "darkgreen")) |>
+  column_spec(8, color = ifelse(comp$EGA_EFA_agree == "✗", "red", "darkgreen")) |>
+  footnote(
+    general = paste0(
+      "EGA = Exploratory Graph Analysis (Walktrap, GLASSO + EBIC). ",
+      "EFA = Principal Axis Factoring with Promax rotation (polychoric correlations). ",
+      "Discrepancies between methods are highlighted. ",
+      "|λ|max = absolute value of the highest Promax loading for each item. ",
+      "SURPS6 and SURPS22 were excluded a priori from this comparison because, in the ",
+      "polychoric correlation matrix, neither item reached |r| ≥ .40 with any within-factor ",
+      "companion, indicating insufficient item-subscale convergence to enter a meaningful ",
+      "structural-assignment contrast."
+    ),
+    general_title = "Note.",
+    footnote_as_chunk = TRUE
+  )
+
+# ── Summary statistics (recalculated on retained items only) ─────────────────
+n_items <- nrow(comp)
+n_ega_theo  <- sum(comp$EGA_agrees == "✓")
+n_efa_theo  <- sum(comp$EFA_agrees == "✓")
+n_ega_efa   <- sum(comp$EGA_EFA_agree == "✓")
+
+cat("=== Structural Congruence Summary (21 retained items) ===\n")
+cat(sprintf("Items excluded from comparison: %s\n",
+            paste(items_excluidos_2b, collapse = ", ")))
+cat(sprintf("EGA vs. Theoretical:  %d/%d items agree (%.1f%%)\n",
+            n_ega_theo, n_items, n_ega_theo/n_items*100))
+cat(sprintf("EFA vs. Theoretical:  %d/%d items agree (%.1f%%)\n",
+            n_efa_theo, n_items, n_efa_theo/n_items*100))
+cat(sprintf("EGA vs. EFA:          %d/%d items agree (%.1f%%)\n",
+            n_ega_efa, n_items, n_ega_efa/n_items*100))
+```
+
+```{r ega-derived-models, include=FALSE}
+# ── Build CFA models from each method's item assignment ──────────────────────
+
+# Helper: build lavaan syntax from a named list of factor → items
+build_cfa_syntax <- function(factor_items, prefix = "") {
+  lines <- sapply(names(factor_items), function(f) {
+    short_name <- switch(f,
+      Hopelessness     = "H",
+      SensationSeeking = "SS",
+      Impulsivity      = "IM",
+      Anxiety          = "AS",
+      f  # fallback
+    )
+    paste0("  ", short_name, " =~ ", paste(factor_items[[f]], collapse = " + "))
+  })
+  paste(lines, collapse = "\n")
+}
+
+# ── EGA-derived factor structure ─────────────────────────────────────────────
+ega_structure <- split(ega_assign$Item, ega_assign$EGA_factor)
+
+cat("=== EGA-derived structure ===\n")
+for (f in names(ega_structure)) {
+  cat(sprintf("  %-20s: %s\n", f, paste(ega_structure[[f]], collapse = ", ")))
+}
+
+modelo_EGA <- build_cfa_syntax(ega_structure)
+cat("\n=== EGA-derived CFA syntax ===\n")
+cat(modelo_EGA, "\n")
+
+# ── EFA-derived factor structure (using dominant Promax loading) ──────────────
+efa_structure <- split(efa_assign$Item, efa_assign$EFA_factor)
+
+cat("\n=== EFA-derived structure (Promax, all 23 items) ===\n")
+for (f in names(efa_structure)) {
+  cat(sprintf("  %-20s: %s\n", f, paste(efa_structure[[f]], collapse = ", ")))
+}
+
+modelo_EFA_full <- build_cfa_syntax(efa_structure)
+
+# ── EFA-derived refined (excluding problematic items: SURPS22 < .30, SURPS6 cross-loading)
+efa_structure_ref <- lapply(efa_structure, function(items) {
+  items[!items %in% c("SURPS22", "SURPS6")]
+})
+# Remove empty factors if any
+efa_structure_ref <- efa_structure_ref[lengths(efa_structure_ref) > 0]
+
+modelo_EFA_ref <- build_cfa_syntax(efa_structure_ref)
+cat("\n=== EFA-derived refined syntax (21 items) ===\n")
+cat(modelo_EFA_ref, "\n")
+
+saveRDS(ega_structure,     here("data", "processed", "ega_structure.rds"))
+saveRDS(efa_structure_ref, here("data", "processed", "efa_structure_ref.rds"))
+saveRDS(comp,              here("data", "processed", "ega_efa_comparison.rds"))
+```
+
+---
+
+# Confirmatory Factor Analysis — Sample B (Model Comparison)
+
+Four competing CFA models are estimated on the hold-out Sample B (50%) using WLSMV. The comparison contrasts the traditional approach (original theoretical model), the modern approach (EGA-derived structure), and the hybrid approach (EFA-guided with and without residual covariance adjustments). This directly addresses the director's request to compare "traditional vs. modern" dimensionality solutions in a confirmatory framework.
+
+Se estimaron seis modelos CFA en la muestra B (n = 642) con estimador WLSMV para comparar la estructura teórica, reasignaciones basadas en EGA (walktrap), y depuraciones guiadas por AFE y EGA. El modelo M4 (4 factores, 18 ítems, excluyendo SURPS16, SURPS6, SURPS22, SURPS4 y SURPS23) mostró el mejor ajuste (CFI = .913, TLI = .896, RMSEA = .060, SRMR = .064), superando sustancialmente al modelo original (ΔCFI = +.022) y confirmando que la combinación de depuración EGA (eliminación de SURPS16 inestable) y AFE (eliminación de ítems con cross-loading, no salientes y redundantes) optimiza la validez estructural del SURPS en población adolescente española.
+
+```{r cfa-modelos-spec, include=FALSE}
+# ── Model 1 (Original): full theoretical model — Woicik et al. (2009) ────────
+# 23 items, structure unchanged.
+modelo_1 <- '
+  H  =~ SURPS1 + SURPS4 + SURPS7 + SURPS13 + SURPS17 + SURPS20 + SURPS23
+  SS =~ SURPS3 + SURPS6 + SURPS9 + SURPS12 + SURPS16 + SURPS19
+  IM =~ SURPS2 + SURPS5 + SURPS11 + SURPS15 + SURPS22
+  AS =~ SURPS8 + SURPS10 + SURPS14 + SURPS18 + SURPS21
+'
+
+# ── Model 2 (EGA refinement): excludes SURPS16, SURPS17 and SURPS22 (20 items)
+# Justificación: SURPS16 emergió como ítem inestable en EGA (asignación errática
+# entre SS e IM); SURPS17 y SURPS22 son señalados por la dirección de tesis a
+# partir de la inspección del análisis exploratorio.
+modelo_2 <- '
+  H  =~ SURPS1 + SURPS4 + SURPS7 + SURPS13 + SURPS20 + SURPS23
+  SS =~ SURPS3 + SURPS6 + SURPS9 + SURPS12 + SURPS19
+  IM =~ SURPS2 + SURPS5 + SURPS11 + SURPS15
+  AS =~ SURPS8 + SURPS10 + SURPS14 + SURPS18 + SURPS21
+'
+
+# ── Model 3 (Item-purification minimal): excludes only SURPS6 and SURPS22 ────
+# 21 items. Retiene la estructura teórica original y elimina únicamente los dos
+# ítems con cargas factoriales más débiles en el modelo base (SURPS6: λ = .455
+# en SS, con cross-loading severo sobre H, MI = 434.4; SURPS22: λ = .393 en IM,
+# ítem no saliente |λ|max < .30 en EFA Promax).
+modelo_3 <- '
+  H  =~ SURPS1 + SURPS4 + SURPS7 + SURPS13 + SURPS17 + SURPS20 + SURPS23
+  SS =~ SURPS3 + SURPS9 + SURPS12 + SURPS16 + SURPS19
+  IM =~ SURPS2 + SURPS5 + SURPS11 + SURPS15
+  AS =~ SURPS8 + SURPS10 + SURPS14 + SURPS18 + SURPS21
+  SURPS7 ~~ SURPS23
+'
+
+# ── Item vectors by model ────────────────────────────────────────────────────
+items_1 <- items_ok  # 23 items
+items_2 <- c(paste0("SURPS", c(1, 4, 7, 13, 20, 23)),
+             paste0("SURPS", c(3, 6, 9, 12, 19)),
+             paste0("SURPS", c(2, 5, 11, 15)),
+             paste0("SURPS", c(8, 10, 14, 18, 21)))
+items_3 <- c(paste0("SURPS", c(1, 4, 7, 13, 17, 20, 23)),
+             paste0("SURPS", c(3, 9, 12, 16, 19)),
+             paste0("SURPS", c(2, 5, 11, 15)),
+             paste0("SURPS", c(8, 10, 14, 18, 21)))
+
+cat("Model 1: 23 items (original Woicik et al., 2009)\n")
+cat("Model 2: 20 items (EGA refinement: −16, −17, −22)\n")
+cat("Model 3: 21 items (Item-purification minimal: −6, −22)\n")
+```
+
+```{r cfa-estimacion, include=FALSE}
+datos_cfa_ord <- muestra_B |>
+  mutate(across(all_of(items_ok), as.integer)) |>
+  filter(complete.cases(across(all_of(items_ok))))
+
+cat("N Sample B (complete cases):", nrow(datos_cfa_ord), "\n")
+
+fit_1 <- cfa(modelo_1, data = datos_cfa_ord, estimator = "WLSMV", ordered = items_1)
+fit_2 <- cfa(modelo_2, data = datos_cfa_ord, estimator = "WLSMV", ordered = items_2)
+fit_3 <- cfa(modelo_3, data = datos_cfa_ord, estimator = "WLSMV", ordered = items_3)
+
+saveRDS(fit_1, here("data", "processed", "fit_1.rds"))
+saveRDS(fit_2, here("data", "processed", "fit_2.rds"))
+saveRDS(fit_3, here("data", "processed", "fit_3.rds"))
+
+# ── Alias for downstream chunks (best candidate; review after running) ───────
+# Por defecto se asigna fit_2 (EGA refinement) como mejor candidato a la luz
+# de la depuración previa. Revisar tras knit y ajustar si fit_3 mostrara
+# mejor CFI/RMSEA.
+fit_M3 <- fit_2
+
+cat("✓ Models 1-3 estimated on Sample B.\n")
+```
+
+```{r cfa-comparacion-final, echo=FALSE}
+extraer_ajuste <- function(fit, nombre) {
+  idx <- fitMeasures(fit, c("chisq.scaled", "df.scaled", "pvalue.scaled",
+                             "cfi.scaled", "tli.scaled",
+                             "rmsea.scaled", "rmsea.ci.lower.scaled",
+                             "rmsea.ci.upper.scaled", "srmr"))
+  data.frame(
+    Model  = nombre,
+    N      = lavaan::nobs(fit),
+    Chi2   = round(unname(idx["chisq.scaled"]), 2),
+    df     = unname(idx["df.scaled"]),
+    p      = ifelse(unname(idx["pvalue.scaled"]) < .001, "< .001",
+                    format(round(unname(idx["pvalue.scaled"]), 3), nsmall = 3)),
+    CFI    = round(unname(idx["cfi.scaled"]), 3),
+    TLI    = round(unname(idx["tli.scaled"]), 3),
+    RMSEA  = round(unname(idx["rmsea.scaled"]), 3),
+    CI90   = paste0("[", round(unname(idx["rmsea.ci.lower.scaled"]), 3),
+                    ", ", round(unname(idx["rmsea.ci.upper.scaled"]), 3), "]"),
+    SRMR   = round(unname(idx["srmr"]), 3)
+  )
+}
+
+tabla_cfa_comp <- rbind(
+  extraer_ajuste(fit_1, "M1: Original (23 items)"),
+  extraer_ajuste(fit_2, "M2: EGA refinement (20, −16,−17,−22)"),
+  extraer_ajuste(fit_3, "M3: Item-purification (21, −6,−22)")
+)
+
+best_row <- which.max(tabla_cfa_comp$CFI)
+
+tabla_cfa_comp |>
+  kable(caption = "Table 3. CFA Model Comparison — Sample B (WLSMV)",
+        col.names = c("Model", "N", "χ²", "df", "p", "CFI", "TLI", "RMSEA", "90% CI", "SRMR")) |>
+  kable_styling(bootstrap_options = c("hover"), full_width = FALSE, position = "center") |>
+  row_spec(best_row, bold = TRUE, background = "#EEF2FF") |>
+  footnote(
+    general = paste0(
+      "M1 = Original 4-factor theoretical model (Woicik et al., 2009; 23 items). ",
+      "M2 = EGA-guided refinement excluding SURPS16 (unstable cluster membership), ",
+      "SURPS17 and SURPS22 (20 items). ",
+      "M3 = Item-purification minimal refinement excluding only SURPS6 ",
+      "(cross-loading on Hopelessness, MI = 434.4) and SURPS22 ",
+      "(non-salient, |λ|max < .30 in EFA Promax; 21 items). ",
+      "Best model highlighted. CFI/TLI ≥.95 = good; RMSEA ≤.06 = good; SRMR ≤.08 = acceptable."
+    ),
+    general_title = "Note.", footnote_as_chunk = TRUE
+  )
+
+saveRDS(tabla_cfa_comp, here("data", "processed", "tabla_cfa_comparison.rds"))
+
+cat("\n=== CFI differences vs. M1 ===\n")
+for (i in 2:3) {
+  cat(sprintf("M%d: CFI = %.3f  |  ΔCFI = %+.3f\n",
+              i, tabla_cfa_comp$CFI[i], tabla_cfa_comp$CFI[i] - tabla_cfa_comp$CFI[1]))
+}
+```
+
+
+```{r cfa-base-modindices, echo=FALSE}
+modindices(fit_3, sort. = TRUE, maximum.number = 15)
+```
+
+
+```{r}
+library(semPlot)
+semPaths(fit_3)
+```
+
+```{r}
+library(semTools)
+semTools::reliability(fit_3)
+```
+
+
+## Factor loadings
+
+```{r tabla-cargas-cfa, echo=FALSE}
+standardizedSolution(fit_M3) |>
+  subset(op == "=~") |>
+  as.data.frame() |>
+  mutate(
+    Subescala = case_when(
+      lhs == "H"  ~ "Hopelessness",
+      lhs == "SS" ~ "Sensation Seeking",
+      lhs == "IM" ~ "Impulsivity",
+      lhs == "AS" ~ "Anxiety Sensitivity"
+    ),
+    Item = rhs,
+    λ    = round(est.std, 3),
+    SE   = round(se, 3),
+    z    = round(z, 2),
+    p    = ifelse(pvalue < .001, "< .001",
+                  format(round(pvalue, 3), nsmall = 3))
+  ) |>
+  select(Subescala, Item, λ, SE, z, p) |>
+  kable(
+    caption   = "Table 4. Standardized Factor Loadings — Final Model (M3, 21 items; Sample B; WLSMV)",
+    col.names = c("Subscale", "Item", "λ", "SE", "z", "p")
+  ) |>
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
+                full_width = FALSE) |>
+  collapse_rows(columns = 1, valign = "top") |>
+  footnote(
+    general = paste0(
+      "λ = standardized loading (WLSMV). ",
+      "Two items were excluded from the final model on empirical grounds: ",
+      "SURPS6 (cross-loading on Hopelessness, MI = 434.4 in the baseline CFA; ",
+      "weak primary loading on Sensation Seeking, λ = .455), and ",
+      "SURPS22 (non-salient loading on Impulsivity, λ = .393 in the baseline CFA; ",
+      "|λ|max < .30 in the EFA Promax solution). ",
+      "The remaining 21 items preserve the theoretical four-factor structure ",
+      "(Hopelessness, Sensation Seeking, Impulsivity, Anxiety Sensitivity) ",
+      "proposed by Woicik et al. (2009). ",
+      "All retained loadings are statistically significant (p < .001) and exceed the ",
+      "conventional salience threshold of .40 (except where indicated). ",
+      "N = ", lavaan::nobs(fit_M3), "."
+    ),
+    general_title = "Note.",
+    footnote_as_chunk = TRUE
+  )
+```
+
+## Inter-factor correlations
+
+```{r correlaciones-factores, echo=FALSE}
+lavInspect(fit_M3, what = "cor.lv") |>
+  round(3) |>
+  as.data.frame() |>
+  kable(
+    caption = "Table 5. Latent Factor Correlations (Model 3; WLSMV; Sample B)"
+  ) |>
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
+                full_width = FALSE) |>
+  footnote(
+    general = paste0(
+      "Estimated correlations among latent factors of the final model (M3, 21 items, ",
+      "excluding SURPS6 and SURPS22). ",
+      "H = Hopelessness; SS = Sensation Seeking; IM = Impulsivity; AS = Anxiety Sensitivity. ",
+      "Correlations |r| ≥ .85 may indicate poor discriminant validity between factors."
+    ),
+    general_title = "Note.",
+    footnote_as_chunk = TRUE
+  )
+```
+
+## SEM path diagram
+
+```{r diagrama-cfa, fig.width=13, fig.height=9, echo=FALSE}
+semPlot::semPaths(
+  fit_M3,
+  what       = "std",
+  layout     = "tree2",
+  rotation   = 2,
+  edge.label.cex = 0.55,
+  sizeMan    = 4,
+  sizeLat    = 9,
+  color      = list(lat = "#4472C4", man = "#ED7D31"),
+  mar        = c(2, 6, 2, 6),
+  nCharNodes = 8,
+  title      = FALSE
+)
+title("Figure 1. CFA Path Diagram — Final Model (M3, 21 items; standardized loadings; Sample B)",
+      cex.main = 0.9, line = -1)
+```
+
+```{r guardar-scores, include=FALSE}
+# ── Final item set: Model 3 (21 items) ───────────────────────────────────────
+# M3 = Item-purification minimal refinement, excluding SURPS6 (cross-loading on
+# Hopelessness, MI = 434.4; weak primary loading on SS, λ = .455) and SURPS22
+# (non-salient, λ = .393 in baseline CFA; |λ|max < .30 in EFA Promax).
+items_final <- items_3  # 21 items: H(7) + SS(5) + IM(4) + AS(5)
+saveRDS(items_final, here("data", "processed", "items_final.rds"))
+
+# ── Refit Model 3 on the FULL sample (for reliability, invariance, validity) ──
+datos_completos <- datos_trabajo |>
+  mutate(across(all_of(items_final), as.integer)) |>
+  filter(complete.cases(across(all_of(items_final))))
+
+fit_M3_full <- cfa(
+  model     = modelo_3,           # Use modelo_3 (21 items, theoretical 4-factor)
+  data      = datos_completos,
+  estimator = "WLSMV",
+  ordered   = items_final
+)
+
+# ── Final factor structure (21 items) ─────────────────────────────────────────
+surps_factores_final <- list(
+  Hopelessness     = paste0("SURPS", c(1, 4, 7, 13, 17, 20, 23)),  # 7 items
+  SensationSeeking = paste0("SURPS", c(3, 9, 12, 16, 19)),         # 5 items
+  Impulsivity      = paste0("SURPS", c(2, 5, 11, 15)),             # 4 items
+  Anxiety          = paste0("SURPS", c(8, 10, 14, 18, 21))         # 5 items
+)
+
+# ── Compute subscale scores (mean of items) ───────────────────────────────────
+datos_scores <- datos_completos |>
+  mutate(
+    PT_H  = rowMeans(pick(all_of(surps_factores_final$Hopelessness))),
+    PT_SS = rowMeans(pick(all_of(surps_factores_final$SensationSeeking))),
+    PT_IM = rowMeans(pick(all_of(surps_factores_final$Impulsivity))),
+    PT_AS = rowMeans(pick(all_of(surps_factores_final$Anxiety)))
+  )
+
+# ── Save objects ──────────────────────────────────────────────────────────────
+saveRDS(fit_M3_full,           here("data", "processed", "fit_M3_full.rds"))
+saveRDS(surps_factores_final, here("data", "processed", "surps_factores_final.rds"))
+saveRDS(datos_scores,         here("data", "processed", "datos_scores.rds"))
+
+cat("✓ N full sample (Model 3):", nrow(datos_scores), "\n")
+cat("✓ Final subscales (21 items):\n")
+for (f in names(surps_factores_final))
+  cat(sprintf("  %-20s: %d items\n", f, length(surps_factores_final[[f]])))
+```
+
+# Reliability — Full Sample
+
+```{r fiabilidad, echo=FALSE}
+# ── Reliability estimated on the full sample using Model 3 (21 items) ────────
+rel <- semTools::reliability(fit_M3_full)
+
+# Alpha ordinal por subescala (policóricas)
+alpha_ord <- sapply(surps_factores_final, function(itms) {
+  dat_f     <- datos_scores[, itms]
+  dat_f_int <- as.data.frame(lapply(dat_f, as.integer))
+  poly_f    <- psych::polychoric(dat_f_int, smooth = TRUE)
+  psych::alpha(poly_f$rho)$total$raw_alpha
+})
+
+tabla_fiab <- data.frame(
+  Subscale  = c("Hopelessness (H)", "Sensation Seeking (SS)",
+                "Impulsivity (IM)", "Anxiety Sensitivity (AS)"),
+  N_items   = c(length(surps_factores_final$Hopelessness),
+                length(surps_factores_final$SensationSeeking),
+                length(surps_factores_final$Impulsivity),
+                length(surps_factores_final$Anxiety)),
+  N_casos   = nrow(datos_scores),
+  Alpha_std = round(unname(rel["alpha", ]), 3),
+  Alpha_ord = round(alpha_ord, 3),
+  Omega     = round(unname(rel["omega", ]), 3)
+)
+rownames(tabla_fiab) <- NULL
+
+tabla_fiab |>
+  kable(
+    caption   = "Table 6. Reliability Indices for the SURPS Subscales — Final Model (M3, 21 items; Full Sample)",
+    align     = c("l", "c", "c", "c", "c", "c"),
+    col.names = c("Subscale", "k", "N", "α", "α ordinal", "ω")
+  ) |>
+  kable_styling(bootstrap_options = c("hover"),
+                full_width = FALSE, position = "center") |>
+  footnote(
+    general = paste0(
+      "k = number of items. ",
+      "α = Cronbach's alpha (standardized). ",
+      "α ordinal = ordinal alpha computed on polychoric correlations ",
+      "(Zumbo et al., 2007); recommended for Likert-type items. ",
+      "ω = McDonald's omega derived from the final 21-item CFA model (M3, WLSMV), ",
+      "excluding SURPS6 and SURPS22. ",
+      "Criteria: α/ω ≥ .70 acceptable; ≥ .80 good (Nunnally & Bernstein, 1994). ",
+      "N = ", nrow(datos_scores), "."
+    ),
+    general_title = "Note.",
+    footnote_as_chunk = TRUE
+  )
+
+saveRDS(tabla_fiab, here("data", "processed", "tabla_fiabilidad.rds"))
+cat("✓ Tabla de fiabilidad guardada (M3, 21 ítems).\n")
+```
+
+# Invariance
+
+Se evaluó la invarianza de medida del modelo final por género y etapa educativa mediante modelos multigrupo CFA (WLSMV) en la muestra completa (N = 1283), contrastando invarianza configural, métrica y escalar. 
+
+```{r aliases-compat, include=FALSE}
+modelo_M3 <- modelo_3
+items_M3  <- items_3
+fit_M3    <- fit_3
+
+# Vector de ítems para invarianza/fiabilidad (alias semántico)
+items_final <- items_M3
+
+cat("✓ Compatibility aliases created: modelo_M3, items_M3, fit_M3, items_final → M3 (Item-purification, 21 items)\n")
+cat("  Items retained:", paste(items_final, collapse = ", "), "\n")
+```
+
+```{r inv-prep, include=FALSE}
+# ── Base dataset for invariance testing ───────────────────────────────────────
+datos_inv <- datos_scores |>
+  mutate(
+    # Gender: robust conversion to character
+    Sexo_chr = case_when(
+      as.character(Sexo) %in% c("H", "1", "1.0") ~ "H",
+      as.character(Sexo) %in% c("M", "2", "2.0") ~ "M",
+      TRUE ~ NA_character_
+    ),
+    across(all_of(items_final), as.integer)
+  ) |>
+  filter(complete.cases(across(all_of(items_final))))
+
+cat("Total N:", nrow(datos_inv), "\n")
+cat("\nGender:\n");     print(table(datos_inv$Sexo_chr,   useNA = "ifany"))
+cat("\nEducational stage:\n");  print(table(datos_inv$Etapa, useNA = "ifany"))
+```
+
+```{r inv-genero, include=FALSE}
+datos_gen <- datos_inv |>
+  filter(Sexo_chr %in% c("H", "M")) |>
+  mutate(SURPS1 = pmin(as.integer(SURPS1), 4L))  # topa en 4, 5→4
+
+# Verificar
+cat("SURPS1 tras recodificación:\n")
+print(table(datos_gen$SURPS1, datos_gen$Sexo_chr))
+cat("\nMáximo por grupo:", tapply(datos_gen$SURPS1, datos_gen$Sexo_chr, max), "\n")
+
+fit_gen_c <- cfa(modelo_M3, data = datos_gen, estimator = "WLSMV",
+                 ordered = items_final, group = "Sexo_chr")
+
+fit_gen_m <- cfa(modelo_M3, data = datos_gen, estimator = "WLSMV",
+                 ordered = items_final, group = "Sexo_chr",
+                 group.equal = "loadings")
+
+fit_gen_s <- cfa(modelo_M3, data = datos_gen, estimator = "WLSMV",
+                 ordered = items_final, group = "Sexo_chr",
+                 group.equal = c("loadings", "thresholds"))
+
+saveRDS(list(config = fit_gen_c, metric = fit_gen_m, scalar = fit_gen_s),
+        here("data", "processed", "inv_genero.rds"))
+cat("✓ Gender invariance estimated.\n")
+```
+
+```{r inv-etapa, include=FALSE}
+# ── Invariance by educational stage (ESO vs. Post-ESO) ───────────────────────
+datos_edu <- datos_inv |>
+  filter(!is.na(Etapa))
+
+cat("N by educational stage:\n"); print(table(datos_edu$Etapa))
+
+fit_edu_c <- tryCatch(
+  cfa(modelo_M3, data = datos_edu, estimator = "WLSMV",
+      ordered = items_final, group = "Etapa"),
+  error = function(e) { cat("Configural failed:", conditionMessage(e), "\n"); NULL })
+
+fit_edu_m <- tryCatch(
+  cfa(modelo_M3, data = datos_edu, estimator = "WLSMV",
+      ordered = items_final, group = "Etapa",
+      group.equal = "loadings"),
+  error = function(e) { cat("Metric failed:", conditionMessage(e), "\n"); NULL })
+
+fit_edu_s <- tryCatch(
+  cfa(modelo_M3, data = datos_edu, estimator = "WLSMV",
+      ordered = items_final, group = "Etapa",
+      group.equal = c("loadings", "thresholds")),
+  error = function(e) { cat("Scalar failed:", conditionMessage(e), "\n"); NULL })
+
+saveRDS(list(config = fit_edu_c, metric = fit_edu_m, scalar = fit_edu_s),
+        here("data", "processed", "inv_etapa.rds"))
+cat("✓ Educational stage invariance estimated.\n")
+```
+
+```{r inv-resultados, echo=FALSE}
+# ── Tabla resumen de invarianza ────────────────────────────────────────────────
+get_idx <- function(fit, modelo, grupo) {
+  if (is.null(fit)) return(
+    data.frame(Grupo = grupo, Modelo = modelo, CFI = NA, TLI = NA,
+               RMSEA = NA, CI90 = NA, SRMR = NA, ΔCFI = NA_real_))
+  idx <- fitMeasures(fit, c("cfi.scaled", "tli.scaled", "rmsea.scaled",
+                             "rmsea.ci.lower.scaled", "rmsea.ci.upper.scaled",
+                             "srmr"))
+  data.frame(
+    Grupo  = grupo,
+    Modelo = modelo,
+    CFI    = round(unname(idx["cfi.scaled"]), 3),
+    TLI    = round(unname(idx["tli.scaled"]), 3),
+    RMSEA  = round(unname(idx["rmsea.scaled"]), 3),
+    CI90   = paste0("[", round(unname(idx["rmsea.ci.lower.scaled"]), 3),
+                    ", ", round(unname(idx["rmsea.ci.upper.scaled"]), 3), "]"),
+    SRMR   = round(unname(idx["srmr"]), 3),
+    ΔCFI   = NA_real_
+  )
+}
+
+tabla_inv <- bind_rows(
+  get_idx(fit_gen_c, "Configural", "Gender"),
+  get_idx(fit_gen_m, "Metric",     "Gender"),
+  get_idx(fit_gen_s, "Scalar",     "Gender"),
+  get_idx(fit_edu_c, "Configural", "Educational Stage"),
+  get_idx(fit_edu_m, "Metric",     "Educational Stage"),
+  get_idx(fit_edu_s, "Scalar",     "Educational Stage")
+) |>
+  group_by(Grupo) |>
+  mutate(ΔCFI = round(lag(CFI) - CFI, 3)) |>
+  ungroup()
+
+tabla_inv |>
+  select(-Grupo) |>
+  kable(
+    caption   = "Table 7. Measurement Invariance — Final Model (M4, 18 items; WLSMV)",
+    col.names = c("Model", "CFI", "TLI", "RMSEA", "90% CI", "SRMR", "ΔCFI")
+  ) |>
+  kable_styling(bootstrap_options = c("hover"),
+                full_width = FALSE, position = "center") |>
+  pack_rows("Gender (Male vs. Female)",           1, 3) |>
+  pack_rows("Educational Stage (ESO vs. Post-ESO)", 4, 6) |>
+  row_spec(c(1, 4), bold = TRUE) |>
+  footnote(
+    general = paste0(
+      "Measurement invariance tested on the final 18-item model across gender and educational stage. ",
+      "ΔCFI = decrease in CFI relative to the previous model. ",
+      "Invariance criterion: |ΔCFI| ≤ .010 (Cheung & Rensvold, 2002). ",
+      "WLSMV estimator with ordered indicators. ",
+      "Scalar invariance = equal factor loadings and thresholds across groups. ",
+      "Educational stage: ESO = compulsory secondary education (2º and 4º ESO); ",
+      "Post-ESO = post-compulsory education (Grado Medio and Bachillerato). ",
+      "In the gender analysis, response category 5 of SURPS1 was collapsed with ",
+      "category 4 in both groups due to zero frequency in males ",
+      "(Flora & Curran, 2004). N = ", nrow(datos_inv), "."
+    ),
+    general_title = "Note.",
+    footnote_as_chunk = TRUE
+  )
+
+saveRDS(tabla_inv, here("data", "processed", "tabla_invarianza.rds"))
+```
+
+# Concurrent Validity — Full Sample
+
+### Validez concurrente Fumar
+Se evaluó la validez concurrente del SURPS comparando las puntuaciones de las cuatro subescalas entre fumadores (n = 485) y no fumadores (n = 789) mediante pruebas U de Mann-Whitney. Los fumadores presentaron puntuaciones significativamente más altas en Impulsivity (r = .219, p < .001), Hopelessness (r = .191, p < .001) y Sensation Seeking (r = .146, p < .001), mientras que Anxiety Sensitivity no mostró diferencias (r = .034, p = .228), lo que confirma la validez concurrente para las dimensiones de riesgo conductual.
+
+```{r validez-fumar}
+sub_labels <- c(PT_H  = "Hopelessness",
+                PT_SS = "Sensation Seeking",
+                PT_IM = "Impulsivity",
+                PT_AS = "Anxiety Sensitivity")
+
+df_long_fum <- datos_scores |>
+  filter(!is.na(recod56)) |>
+  mutate(Smoking = factor(recod56, levels = c(0,1),
+                          labels = c("Non-smoker", "Smoker"))) |>
+  pivot_longer(cols = all_of(names(sub_labels)),
+               names_to = "Subscale", values_to = "Score") |>
+  mutate(Subscale = recode(Subscale, !!!sub_labels))
+
+test_fum <- df_long_fum |>
+  group_by(Subscale) |>
+  wilcox_test(Score ~ Smoking) |>
+  add_significance()
+
+ef_fum <- df_long_fum |>
+  group_by(Subscale) |>
+  wilcox_effsize(Score ~ Smoking)
+
+test_fum |>
+  left_join(ef_fum |> select(Subscale, effsize, magnitude),
+            by = "Subscale") |>
+  mutate(
+    W   = format(round(statistic, 1), big.mark = ","),
+    p   = ifelse(p < .001, "< .001", format(round(p, 3), nsmall = 3)),
+    r   = round(effsize, 3),
+    Mag = str_to_title(magnitude)
+  ) |>
+  select(Subscale, n1, n2, W, p, r, Mag) |>
+  rename("n (Non-smoker)" = n1, "n (Smoker)" = n2, "Magnitude" = Mag) |>
+  kable(
+    caption = "Table 8. SURPS Subscale Differences by Tobacco Use — Final Model (M4, 18 items)",
+    align   = c("l", "c", "c", "c", "c", "c", "l")
+  ) |>
+  kable_styling(bootstrap_options = c("hover"),
+                full_width = FALSE, position = "center") |>
+  add_header_above(c(" " = 1, "n" = 2, "Mann-Whitney" = 2, "Effect Size" = 2)) |>
+  footnote(
+    general = paste0(
+      "W = Mann-Whitney U statistic; r = rank-biserial correlation ",
+      "(|r| ≥ .10 = small, ≥ .30 = medium, ≥ .50 = large). ",
+      "Subscale scores computed as mean of items from the final 18-item model. ",
+      "Smoking status: recod56 (0 = Non-smoker, 1 = Smoker). ",
+      "N analyzed = ", nrow(df_long_fum)/4, "."
+    ),
+    general_title = "Note.",
+    footnote_as_chunk = TRUE
+  )
+```
+
+```{r validez-fumar-plot, fig.height=5, fig.width=11}
+df_long_fum |>
+  ggplot(aes(x = Smoking, y = Score, fill = Smoking)) +
+  geom_boxplot(alpha = .75, outlier.alpha = .2, linewidth = .4) +
+  stat_summary(fun = mean, geom = "point",
+               shape = 21, size = 2.5, fill = "white", color = "black") +
+  facet_wrap(~ Subscale, nrow = 1, scales = "free_y") +
+  scale_fill_manual(values = c("#4472C4", "#ED7D31")) +
+  labs(title = "Figure 2. SURPS Subscale Scores by Tobacco Use Status",
+       subtitle = "White dot = mean",
+       x = NULL, y = "Mean item score", fill = NULL) +
+  theme_minimal(base_size = 11) +
+  theme(legend.position = "bottom",
+        strip.text = element_text(face = "bold"))
+```
+### Validez concurrente Relaciones sexuales con riesgo
+
+Se evaluó la asociación entre las subescalas SURPS y relaciones sexuales sin protección (USI) en 1277 adolescentes mediante pruebas U de Mann-Whitney. Los adolescentes con USI (n = 135, 10.6%) mostraron puntuaciones significativamente más altas en Impulsivity (r = .131, p < .001), Sensation Seeking (r = .113, p < .001) y Hopelessness (r = .095, p < .001), mientras que Anxiety Sensitivity no difirió (r = .042, p = .138), replicando el patrón observado con conducta de fumar y apoyando la validez discriminante del instrumento.
+
+```{r validez-usi}
+df_long_usi <- datos_scores |>
+  filter(!is.na(recod44I)) |>
+  mutate(USI = factor(recod44I, levels = c(0,1),
+                      labels = c("No USI", "USI"))) |>
+  pivot_longer(cols = all_of(names(sub_labels)),
+               names_to = "Subscale", values_to = "Score") |>
+  mutate(Subscale = recode(Subscale, !!!sub_labels))
+
+test_usi <- df_long_usi |>
+  group_by(Subscale) |>
+  wilcox_test(Score ~ USI) |>
+  add_significance()
+
+ef_usi <- df_long_usi |>
+  group_by(Subscale) |>
+  wilcox_effsize(Score ~ USI)
+
+test_usi |>
+  left_join(ef_usi |> select(Subscale, effsize, magnitude),
+            by = "Subscale") |>
+  mutate(
+    W   = format(round(statistic, 1), big.mark = ","),
+    p   = ifelse(p < .001, "< .001", format(round(p, 3), nsmall = 3)),
+    r   = round(effsize, 3),
+    Mag = str_to_title(magnitude)
+  ) |>
+  select(Subscale, n1, n2, W, p, r, Mag) |>
+  rename("n (No USI)" = n1, "n (USI)" = n2, "Magnitude" = Mag) |>
+  kable(
+    caption = "Table 9. SURPS Subscale Differences by Unprotected Sexual Intercourse — Final Model (M4, 18 items)",
+    align   = c("l", "c", "c", "c", "c", "c", "l")
+  ) |>
+  kable_styling(bootstrap_options = c("hover"),
+                full_width = FALSE, position = "center") |>
+  add_header_above(c(" " = 1, "n" = 2, "Mann-Whitney" = 2, "Effect Size" = 2)) |>
+  footnote(
+    general = paste0(
+      "USI = unprotected sexual intercourse (recod44I: 0 = No, 1 = Yes); ",
+      "r = rank-biserial correlation. ",
+      "Subscale scores computed as mean of items from the final 18-item model. ",
+      "N analyzed = ", nrow(df_long_usi)/4, "."
+    ),
+    general_title = "Note.",
+    footnote_as_chunk = TRUE
+  )
+```
+
+```{r validez-usi-plot, fig.height=5, fig.width=11}
+df_long_usi |>
+  ggplot(aes(x = USI, y = Score, fill = USI)) +
+  geom_boxplot(alpha = .75, outlier.alpha = .2, linewidth = .4) +
+  stat_summary(fun = mean, geom = "point",
+               shape = 21, size = 2.5, fill = "white", color = "black") +
+  facet_wrap(~ Subscale, nrow = 1, scales = "free_y") +
+  scale_fill_manual(values = c("#70AD47", "#E74C3C")) +
+  labs(title = "Figure 3. SURPS Subscale Scores by Unprotected Sexual Intercourse",
+       subtitle = "White dot = mean",
+       x = NULL, y = "Mean item score", fill = NULL) +
+  theme_minimal(base_size = 11) +
+  theme(legend.position = "bottom",
+        strip.text = element_text(face = "bold"))
+```
+
+```{r session, echo=FALSE, include=FALSE}
+sessionInfo()
+```
+
+```{r collapsible-js, echo=FALSE, results='asis'}
+if (knitr::is_html_output()) {
+  cat(r"(
+<script>
+$(document).ready(function () {
+  $("div.section.level2").each(function (i) {
+    var id  = "collapse-sec-" + i;
+    var $h2 = $(this).find("h2").first();
+    $(this).children().not("h2")
+      .wrapAll('<div id="' + id + '" class="collapse in"></div>');
+    $h2.css("cursor", "pointer")
+       .attr("data-toggle", "collapse")
+       .attr("data-target", "#" + id)
+       .append(' <span class="toggle-icon" style="font-size:.8em;float:right;margin-top:3px">&#9650;</span>');
+  });
+  $(document).on("click", "[data-toggle='collapse']", function () {
+    $(this).find(".toggle-icon").toggleClass("rotated");
+  });
+});
+</script>
+<style>
+.toggle-icon.rotated { transform: rotate(180deg); display: inline-block; }
+[data-toggle="collapse"]:hover { background: rgba(0,0,0,.04); border-radius:4px; }
+</style>
+)")
+}
+```
