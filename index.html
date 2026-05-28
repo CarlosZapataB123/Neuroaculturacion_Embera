@@ -1,0 +1,1268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Neuro-Acculturation in Embera Chami — Research Repository</title>
+<meta name="description" content="Cross-sectional study on acculturation levels and neuropsychological performance in the Embera Chami indigenous community, Florencia, Caquetá, Colombia, 2020.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;0,900;1,400&family=DM+Sans:wght@300;400;500&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+  :root {
+    --bg: #0c0e0d;
+    --bg-surface: #141714;
+    --bg-card: #1a1e1b;
+    --bg-card-hover: #202520;
+    --terra: #C8703A;
+    --terra-dim: #8a4c27;
+    --forest: #4A8B6F;
+    --ochre: #D4A853;
+    --cream: #F0EBE1;
+    --cream-dim: #b8b0a4;
+    --cream-ghost: #5c5650;
+    --border: rgba(240,235,225,0.08);
+    --border-bright: rgba(240,235,225,0.18);
+    --font-display: 'Playfair Display', Georgia, serif;
+    --font-body: 'DM Sans', system-ui, sans-serif;
+    --font-mono: 'IBM Plex Mono', monospace;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; font-size: 16px; }
+  body {
+    background: var(--bg);
+    color: var(--cream);
+    font-family: var(--font-body);
+    font-weight: 300;
+    line-height: 1.7;
+    overflow-x: hidden;
+  }
+  ::selection { background: var(--terra); color: #fff; }
+
+  /* ── SCROLLBAR ── */
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--terra-dim); border-radius: 2px; }
+
+  /* ── SCROLL PROGRESS ── */
+  #scroll-bar {
+    position: fixed; top: 0; left: 0; height: 2px; width: 0%;
+    background: linear-gradient(90deg, var(--terra), var(--ochre));
+    z-index: 1000; transition: width 0.1s linear;
+  }
+
+  /* ── NAV ── */
+  nav {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 900;
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 1.1rem 5vw;
+    background: rgba(12,14,13,0.85);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border);
+    transition: background 0.3s;
+  }
+  .nav-logo {
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    color: var(--terra);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .nav-links {
+    display: flex; gap: 2.4rem;
+    list-style: none;
+  }
+  .nav-links a {
+    font-size: 0.82rem;
+    color: var(--cream-dim);
+    text-decoration: none;
+    letter-spacing: 0.04em;
+    transition: color 0.2s;
+  }
+  .nav-links a:hover { color: var(--cream); }
+  .nav-cta {
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    padding: 0.45rem 1.2rem;
+    border: 1px solid var(--terra);
+    color: var(--terra);
+    border-radius: 2px;
+    text-decoration: none;
+    letter-spacing: 0.06em;
+    transition: background 0.2s, color 0.2s;
+  }
+  .nav-cta:hover { background: var(--terra); color: #fff; }
+
+  /* ── HERO ── */
+  #hero {
+    position: relative;
+    min-height: 100vh;
+    display: flex; flex-direction: column;
+    justify-content: center; align-items: flex-start;
+    padding: 8rem 5vw 4rem;
+    overflow: hidden;
+  }
+  #neural-canvas {
+    position: absolute; top: 0; left: 0;
+    width: 100%; height: 100%;
+    opacity: 0.35;
+  }
+  .hero-eyebrow {
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    color: var(--terra);
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    margin-bottom: 1.5rem;
+    position: relative;
+    display: flex; align-items: center; gap: 0.8rem;
+  }
+  .hero-eyebrow::before {
+    content: '';
+    display: inline-block;
+    width: 2.5rem; height: 1px;
+    background: var(--terra);
+  }
+  .hero-title {
+    font-family: var(--font-display);
+    font-size: clamp(2.8rem, 6vw, 5.2rem);
+    font-weight: 900;
+    line-height: 1.08;
+    max-width: 820px;
+    position: relative;
+    margin-bottom: 1.2rem;
+  }
+  .hero-title em {
+    font-style: italic;
+    color: var(--terra);
+  }
+  .hero-subtitle {
+    font-size: 1.05rem;
+    color: var(--cream-dim);
+    max-width: 580px;
+    line-height: 1.7;
+    position: relative;
+    margin-bottom: 3rem;
+  }
+  .hero-badges {
+    display: flex; flex-wrap: wrap; gap: 0.6rem;
+    position: relative; margin-bottom: 3.5rem;
+  }
+  .badge {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    padding: 0.3rem 0.75rem;
+    border: 1px solid var(--border-bright);
+    border-radius: 2px;
+    color: var(--cream-dim);
+    letter-spacing: 0.05em;
+  }
+  .badge.accent { border-color: var(--terra); color: var(--terra); }
+  .badge.green { border-color: var(--forest); color: var(--forest); }
+  .badge.gold { border-color: var(--ochre); color: var(--ochre); }
+
+  /* ── STAT COUNTERS ── */
+  .hero-stats {
+    display: flex; gap: 3.5rem; flex-wrap: wrap;
+    position: relative;
+    padding-top: 2rem;
+    border-top: 1px solid var(--border);
+  }
+  .hero-stat-num {
+    font-family: var(--font-display);
+    font-size: 2.8rem;
+    font-weight: 700;
+    color: var(--cream);
+    display: block;
+    line-height: 1;
+  }
+  .hero-stat-num span { color: var(--terra); }
+  .hero-stat-label {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    color: var(--cream-ghost);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-top: 0.3rem;
+    display: block;
+  }
+  .scroll-hint {
+    position: absolute; bottom: 2.5rem; left: 50%;
+    transform: translateX(-50%);
+    display: flex; flex-direction: column; align-items: center; gap: 0.5rem;
+    font-family: var(--font-mono); font-size: 0.65rem;
+    color: var(--cream-ghost); letter-spacing: 0.1em;
+    animation: bounce 2.5s infinite;
+  }
+  .scroll-hint::after {
+    content: '';
+    width: 1px; height: 40px;
+    background: linear-gradient(to bottom, var(--cream-ghost), transparent);
+  }
+  @keyframes bounce {
+    0%, 100% { transform: translateX(-50%) translateY(0); }
+    50% { transform: translateX(-50%) translateY(6px); }
+  }
+
+  /* ── SECTIONS GENERIC ── */
+  section {
+    padding: 6rem 5vw;
+    max-width: 1400px;
+    margin: 0 auto;
+  }
+  .section-tag {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    color: var(--terra);
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    margin-bottom: 0.8rem;
+    display: flex; align-items: center; gap: 0.6rem;
+  }
+  .section-tag::before {
+    content: ''; width: 1.5rem; height: 1px; background: var(--terra);
+  }
+  .section-title {
+    font-family: var(--font-display);
+    font-size: clamp(1.9rem, 3.5vw, 2.8rem);
+    font-weight: 700;
+    line-height: 1.2;
+    margin-bottom: 1rem;
+  }
+  .section-lead {
+    font-size: 1rem;
+    color: var(--cream-dim);
+    max-width: 640px;
+    line-height: 1.75;
+    margin-bottom: 3rem;
+  }
+  .divider {
+    width: 100%;
+    height: 1px;
+    background: var(--border);
+    margin: 0;
+  }
+
+  /* ── ABOUT GRID ── */
+  .about-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 5rem;
+    align-items: start;
+  }
+  @media (max-width: 860px) { .about-grid { grid-template-columns: 1fr; gap: 3rem; } }
+  .about-text p { color: var(--cream-dim); margin-bottom: 1.2rem; font-size: 0.97rem; }
+  .about-text strong { color: var(--cream); font-weight: 500; }
+  .info-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 1.5rem;
+    margin-bottom: 1rem;
+    transition: border-color 0.25s, background 0.25s;
+  }
+  .info-card:hover { border-color: var(--border-bright); background: var(--bg-card-hover); }
+  .info-card-label {
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--terra);
+    margin-bottom: 0.35rem;
+  }
+  .info-card-value {
+    font-size: 0.95rem;
+    color: var(--cream);
+    line-height: 1.5;
+  }
+  .info-card-value em { color: var(--cream-dim); font-style: normal; font-size: 0.85rem; }
+
+  /* ── DATA SECTION ── */
+  #data { background: var(--bg-surface); max-width: 100%; padding: 6rem 5vw; }
+  .data-inner { max-width: 1400px; margin: 0 auto; }
+  .charts-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 1.5rem;
+  }
+  .chart-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 1.75rem;
+    transition: border-color 0.25s;
+  }
+  .chart-card:hover { border-color: var(--border-bright); }
+  .chart-title {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--cream-ghost);
+    margin-bottom: 0.3rem;
+  }
+  .chart-subtitle {
+    font-size: 1.05rem;
+    font-weight: 500;
+    color: var(--cream);
+    margin-bottom: 1.5rem;
+  }
+  .chart-wrap { position: relative; width: 100%; }
+
+  /* ── INSTRUMENTS ── */
+  .instruments-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 1rem;
+  }
+  .instrument-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 1.3rem 1.4rem;
+    display: flex; align-items: flex-start; gap: 1rem;
+    transition: border-color 0.25s, transform 0.2s;
+    cursor: default;
+  }
+  .instrument-card:hover {
+    border-color: var(--border-bright);
+    transform: translateY(-2px);
+  }
+  .instrument-icon {
+    width: 36px; height: 36px; min-width: 36px;
+    border-radius: 3px;
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--font-mono);
+    font-size: 0.65rem;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+  }
+  .ic-mem { background: rgba(200,112,58,0.15); color: var(--terra); }
+  .ic-attn { background: rgba(74,139,111,0.15); color: var(--forest); }
+  .ic-exec { background: rgba(212,168,83,0.15); color: var(--ochre); }
+  .ic-lang { background: rgba(138,76,39,0.15); color: #e8916d; }
+  .ic-vis { background: rgba(100,130,200,0.15); color: #8aaee8; }
+  .ic-qol { background: rgba(120,180,140,0.15); color: #7fb89a; }
+  .ic-acc { background: rgba(180,120,200,0.15); color: #c49ae0; }
+  .instrument-name {
+    font-size: 0.88rem;
+    font-weight: 500;
+    color: var(--cream);
+    line-height: 1.3;
+    margin-bottom: 0.25rem;
+  }
+  .instrument-domain {
+    font-family: var(--font-mono);
+    font-size: 0.65rem;
+    color: var(--cream-ghost);
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+
+  /* ── ARTICLES PROGRESS ── */
+  .articles-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2rem;
+  }
+  @media (max-width: 780px) { .articles-grid { grid-template-columns: 1fr; } }
+  .article-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 2rem;
+    position: relative;
+    overflow: hidden;
+    transition: border-color 0.25s;
+  }
+  .article-card:hover { border-color: var(--border-bright); }
+  .article-card::before {
+    content: '';
+    position: absolute; top: 0; left: 0; right: 0;
+    height: 2px;
+  }
+  .article-card.art1::before { background: var(--terra); }
+  .article-card.art2::before { background: var(--forest); }
+  .article-number {
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    letter-spacing: 0.12em;
+    color: var(--cream-ghost);
+    text-transform: uppercase;
+    margin-bottom: 0.6rem;
+  }
+  .article-title {
+    font-family: var(--font-display);
+    font-size: 1.1rem;
+    font-weight: 700;
+    line-height: 1.35;
+    margin-bottom: 0.9rem;
+    color: var(--cream);
+  }
+  .article-desc {
+    font-size: 0.88rem;
+    color: var(--cream-dim);
+    margin-bottom: 1.5rem;
+    line-height: 1.65;
+  }
+  .progress-label {
+    display: flex; justify-content: space-between;
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    letter-spacing: 0.08em;
+    color: var(--cream-ghost);
+    margin-bottom: 0.4rem;
+  }
+  .progress-bar-track {
+    width: 100%; height: 3px;
+    background: var(--border);
+    border-radius: 2px;
+    margin-bottom: 1.2rem;
+    overflow: hidden;
+  }
+  .progress-bar-fill {
+    height: 100%; width: 0%;
+    border-radius: 2px;
+    transition: width 1.5s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  .art1 .progress-bar-fill { background: var(--terra); }
+  .art2 .progress-bar-fill { background: var(--forest); }
+  .milestone-list { list-style: none; }
+  .milestone-list li {
+    display: flex; align-items: center; gap: 0.6rem;
+    font-size: 0.83rem;
+    color: var(--cream-dim);
+    padding: 0.3rem 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .milestone-list li:last-child { border-bottom: none; }
+  .milestone-list li::before {
+    content: ''; width: 6px; height: 6px;
+    border-radius: 50%; flex-shrink: 0;
+  }
+  .milestone-list li.done { color: var(--cream); }
+  .milestone-list li.done::before { background: var(--forest); }
+  .milestone-list li.active::before { background: var(--ochre); }
+  .milestone-list li.pending::before { background: var(--cream-ghost); }
+
+  /* ── TEAM ── */
+  .team-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 1.5rem;
+  }
+  .team-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 1.75rem;
+    display: flex; flex-direction: column; gap: 1rem;
+    transition: border-color 0.25s;
+  }
+  .team-card:hover { border-color: var(--border-bright); }
+  .team-avatar {
+    width: 52px; height: 52px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--font-mono);
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--cream);
+    border: 1px solid var(--border-bright);
+  }
+  .av1 { background: rgba(200,112,58,0.2); }
+  .av2 { background: rgba(74,139,111,0.2); }
+  .av3 { background: rgba(212,168,83,0.2); }
+  .team-name {
+    font-size: 1rem;
+    font-weight: 500;
+    color: var(--cream);
+    margin-bottom: 0.15rem;
+  }
+  .team-role {
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    color: var(--cream-ghost);
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+  }
+  .team-affil {
+    font-size: 0.82rem;
+    color: var(--cream-dim);
+    line-height: 1.5;
+    border-top: 1px solid var(--border);
+    padding-top: 0.75rem;
+    margin-top: 0.25rem;
+  }
+  .team-tag {
+    font-family: var(--font-mono);
+    font-size: 0.66rem;
+    padding: 0.2rem 0.55rem;
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    color: var(--cream-ghost);
+    display: inline-block;
+  }
+
+  /* ── ETHICS BANNER ── */
+  .ethics-strip {
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 1.5rem 2rem;
+    display: flex; flex-wrap: wrap; gap: 2rem;
+    align-items: center;
+    margin-top: 3rem;
+  }
+  .ethics-item {
+    display: flex; align-items: flex-start; gap: 0.75rem;
+  }
+  .ethics-dot {
+    width: 8px; height: 8px; min-width: 8px;
+    border-radius: 50%; margin-top: 0.35rem;
+    background: var(--forest);
+  }
+  .ethics-text { font-size: 0.85rem; color: var(--cream-dim); line-height: 1.5; }
+  .ethics-text strong { color: var(--cream); }
+
+  /* ── FOOTER ── */
+  footer {
+    background: var(--bg-surface);
+    border-top: 1px solid var(--border);
+    padding: 3rem 5vw;
+    max-width: 100%;
+  }
+  .footer-inner {
+    max-width: 1400px; margin: 0 auto;
+    display: flex; justify-content: space-between; align-items: center;
+    flex-wrap: wrap; gap: 2rem;
+  }
+  .footer-left p {
+    font-size: 0.82rem; color: var(--cream-dim);
+    margin-bottom: 0.4rem;
+  }
+  .footer-left strong { color: var(--cream); }
+  .footer-link {
+    display: inline-flex; align-items: center; gap: 0.5rem;
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    color: var(--terra);
+    text-decoration: none;
+    letter-spacing: 0.07em;
+    border: 1px solid var(--terra);
+    padding: 0.5rem 1rem;
+    border-radius: 2px;
+    transition: background 0.2s, color 0.2s;
+  }
+  .footer-link:hover { background: var(--terra); color: #fff; }
+
+  /* ── FADE-IN ON SCROLL ── */
+  .fade-in {
+    opacity: 0;
+    transform: translateY(24px);
+    transition: opacity 0.7s ease, transform 0.7s ease;
+  }
+  .fade-in.visible {
+    opacity: 1; transform: translateY(0);
+  }
+  .fade-in-delay-1 { transition-delay: 0.1s; }
+  .fade-in-delay-2 { transition-delay: 0.2s; }
+  .fade-in-delay-3 { transition-delay: 0.3s; }
+
+  /* ── MOBILE ── */
+  @media (max-width: 600px) {
+    .nav-links { display: none; }
+    .hero-stats { gap: 2rem; }
+    section { padding: 4rem 5vw; }
+  }
+</style>
+</head>
+<body>
+
+<div id="scroll-bar"></div>
+
+<nav>
+  <span class="nav-logo">Neuro-Aculturación · Embera</span>
+  <ul class="nav-links">
+    <li><a href="#about">Study</a></li>
+    <li><a href="#data">Data</a></li>
+    <li><a href="#instruments">Methods</a></li>
+    <li><a href="#articles">Articles</a></li>
+    <li><a href="#team">Team</a></li>
+  </ul>
+  <a href="https://github.com/CarlosZapataB123/Neuroaculturacion_Embera" target="_blank" rel="noopener" class="nav-cta">→ GitHub</a>
+</nav>
+
+<!-- ════════════ HERO ════════════ -->
+<section id="hero">
+  <canvas id="neural-canvas" aria-hidden="true"></canvas>
+
+  <div class="hero-eyebrow" role="doc-subtitle">Epidemiología · Neuropsicología · Comunidades Indígenas</div>
+
+  <h1 class="hero-title">
+    Aculturación &amp; <em>Rendimiento<br>Neuropsicológico</em><br>en el Pueblo Embera Chami
+  </h1>
+
+  <p class="hero-subtitle">
+    Estudio observacional transversal. Resguardo Chami Puru · Florencia, Caquetá, Colombia · 2020.
+    El primer estudio que mide la relación entre aculturación y cognición en población indígena colombiana.
+  </p>
+
+  <div class="hero-badges">
+    <span class="badge accent">Cross-sectional · n = 88</span>
+    <span class="badge green">Ética aprobada · UniAndes 2020</span>
+    <span class="badge gold">STROBE-compliant</span>
+    <span class="badge">R · tidyverse · lme4</span>
+    <span class="badge">APA 7 · Q1 target</span>
+  </div>
+
+  <div class="hero-stats">
+    <div>
+      <span class="hero-stat-num" id="cnt-n">0<span>%</span></span>
+      <span class="hero-stat-label">cobertura censal</span>
+    </div>
+    <div>
+      <span class="hero-stat-num" id="cnt-part">0</span>
+      <span class="hero-stat-label">participantes</span>
+    </div>
+    <div>
+      <span class="hero-stat-num" id="cnt-inst">0</span>
+      <span class="hero-stat-label">instrumentos neuropsic.</span>
+    </div>
+    <div>
+      <span class="hero-stat-num" id="cnt-alpha">0.<span>0</span></span>
+      <span class="hero-stat-label">α Cronbach · escala aculturación</span>
+    </div>
+    <div>
+      <span class="hero-stat-num" id="cnt-art">0</span>
+      <span class="hero-stat-label">artículos en curso</span>
+    </div>
+  </div>
+
+  <div class="scroll-hint" aria-hidden="true">scroll</div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ════════════ ABOUT ════════════ -->
+<section id="about">
+  <div class="fade-in">
+    <p class="section-tag">Sobre el estudio</p>
+    <h2 class="section-title">Una pregunta inédita<br>en neuropsicología indígena</h2>
+  </div>
+
+  <div class="about-grid">
+    <div class="about-text fade-in fade-in-delay-1">
+      <p>Colombia alberga <strong>102 pueblos indígenas</strong> con 1.2 millones de personas. La comunidad <strong>Embera Chami</strong> conserva su lengua y tradiciones mientras experimenta contacto sostenido con la cultura dominante — ofreciendo una ventana excepcional para medir cómo el gradiente de aculturación se imprime en la cognición.</p>
+      <p>Hasta 2020, <strong>no existía ningún estudio</strong> que evaluara la relación entre niveles de aculturación y rendimiento neuropsicológico en población indígena colombiana. Este proyecto genera los primeros datos normativos cognitivos para el pueblo Embera y abre la puerta a baremos ajustados culturalmente.</p>
+      <p>La pregunta central: <em>"¿Cuál es la asociación entre los niveles de aculturación y el rendimiento neuropsicológico en adultos Embera Chami (18–80 años), Florencia, 2020?"</em></p>
+      <p>El protocolo fue <strong>aprobado éticamente</strong> por la Universidad de los Andes (Acta 202001281, enero 2020) y por la comunidad en asamblea general.</p>
+    </div>
+
+    <div class="fade-in fade-in-delay-2">
+      <div class="info-card">
+        <p class="info-card-label">Diseño</p>
+        <p class="info-card-value">Observacional transversal · muestreo censo<br><em>87% de cobertura poblacional alcanzada</em></p>
+      </div>
+      <div class="info-card">
+        <p class="info-card-label">Población</p>
+        <p class="info-card-value">Adultos 18–80 años, etnia Embera Chami<br><em>Resguardo Chami Puru · Florencia, Caquetá</em></p>
+      </div>
+      <div class="info-card">
+        <p class="info-card-label">Variable predictora</p>
+        <p class="info-card-value">Nivel de aculturación (baja vs. alta)<br><em>Escala adaptada Marín & Marín, 1987 · α = 0.86</em></p>
+      </div>
+      <div class="info-card">
+        <p class="info-card-label">Variables de respuesta</p>
+        <p class="info-card-value">Aprendizaje · Memoria verbal · Función ejecutiva<br>Atención · Velocidad procesamiento · Lenguaje</p>
+      </div>
+      <div class="info-card">
+        <p class="info-card-label">Confusores controlados</p>
+        <p class="info-card-value">Edad · Escolaridad · Sexo · Ingresos · Trabajo<br><em>fuera de la comunidad · IMC</em></p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ════════════ DATA DASHBOARD ════════════ -->
+<div id="data">
+<section class="data-inner">
+  <div class="fade-in">
+    <p class="section-tag">Perfil de la muestra</p>
+    <h2 class="section-title">n = 88 · Descripción sociodemográfica</h2>
+    <p class="section-lead">Distribución de la muestra por edad, sexo, escolaridad, ocupación e ingresos. Datos recolectados mediante censo de la comunidad residente al momento del estudio (2020).</p>
+  </div>
+
+  <div class="charts-grid">
+
+    <!-- CHART 1: Age distribution -->
+    <div class="chart-card fade-in fade-in-delay-1">
+      <p class="chart-title">Distribución por grupo de edad</p>
+      <p class="chart-subtitle">Pirámide de edad (n=88)</p>
+      <div class="chart-wrap" style="height:220px;">
+        <canvas id="chartAge" role="img" aria-label="Distribución de edad: 44.3% de 18-29, 29.5% de 30-39, 17% de 40-49, 5.7% de 50-59, 3.4% de 60+">Grupos etarios: 18-29: 39 (44.3%), 30-39: 26 (29.5%), 40-49: 15 (17.0%), 50-59: 5 (5.7%), 60+: 3 (3.4%).</canvas>
+      </div>
+    </div>
+
+    <!-- CHART 2: Education donut -->
+    <div class="chart-card fade-in fade-in-delay-2">
+      <p class="chart-title">Nivel de escolaridad</p>
+      <p class="chart-subtitle">Distribución porcentual</p>
+      <div style="display:flex;gap:1.2rem;align-items:center;">
+        <div class="chart-wrap" style="height:200px;width:200px;min-width:200px;">
+          <canvas id="chartEdu" role="img" aria-label="Escolaridad: 18.2% sin escolaridad, 31.8% primaria, 45.5% secundaria, 4.5% superior">Escolaridad: Sin escolaridad 16 (18.2%), Primaria 28 (31.8%), Secundaria 40 (45.5%), Superior 4 (4.5%).</canvas>
+        </div>
+        <div id="edu-legend" style="font-size:0.78rem;line-height:2;"></div>
+      </div>
+    </div>
+
+    <!-- CHART 3: Occupation stacked -->
+    <div class="chart-card fade-in fade-in-delay-3">
+      <p class="chart-title">Ocupación · Por sexo</p>
+      <p class="chart-subtitle">Distribución por género (N=88)</p>
+      <div class="chart-wrap" style="height:220px;">
+        <canvas id="chartOcc" role="img" aria-label="Ocupaciones por sexo: Agricultura, Ama de casa, Artesanías, Líderes">Ocupaciones por sexo.</canvas>
+      </div>
+    </div>
+
+    <!-- CHART 4: Income bar -->
+    <div class="chart-card fade-in fade-in-delay-1">
+      <p class="chart-title">Ingresos mensuales (COP)</p>
+      <p class="chart-subtitle">Distribución en la muestra total</p>
+      <div class="chart-wrap" style="height:220px;">
+        <canvas id="chartIncome" role="img" aria-label="Ingresos: 70.5% entre 0-200,000 COP, 21.6% entre 200,001-400,000, 5.7% entre 400,001-600,000, 1.1% entre 800,001-1,000,000, 1.1% más de 1,000,000">Distribución de ingresos mensuales en COP.</canvas>
+      </div>
+    </div>
+
+    <!-- STAT CARDS -->
+    <div class="chart-card fade-in fade-in-delay-2" style="display:flex;flex-direction:column;justify-content:space-between;gap:1.2rem;">
+      <p class="chart-title">Indicadores clave</p>
+      <p class="chart-subtitle">Variables clínicas y sociales</p>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;">
+        <div style="background:var(--bg-surface);border:1px solid var(--border);border-radius:3px;padding:0.9rem;">
+          <p style="font-family:var(--font-mono);font-size:0.65rem;color:var(--cream-ghost);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:0.25rem;">IMC normal</p>
+          <p style="font-family:var(--font-display);font-size:1.6rem;font-weight:700;color:var(--forest);">54.5<span style="font-size:1rem;">%</span></p>
+        </div>
+        <div style="background:var(--bg-surface);border:1px solid var(--border);border-radius:3px;padding:0.9rem;">
+          <p style="font-family:var(--font-mono);font-size:0.65rem;color:var(--cream-ghost);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:0.25rem;">Con pareja</p>
+          <p style="font-family:var(--font-display);font-size:1.6rem;font-weight:700;color:var(--ochre);">75.0<span style="font-size:1rem;">%</span></p>
+        </div>
+        <div style="background:var(--bg-surface);border:1px solid var(--border);border-radius:3px;padding:0.9rem;">
+          <p style="font-family:var(--font-mono);font-size:0.65rem;color:var(--cream-ghost);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:0.25rem;">Trabajaron fuera</p>
+          <p style="font-family:var(--font-display);font-size:1.6rem;font-weight:700;color:var(--terra);">45.5<span style="font-size:1rem;">%</span></p>
+        </div>
+        <div style="background:var(--bg-surface);border:1px solid var(--border);border-radius:3px;padding:0.9rem;">
+          <p style="font-family:var(--font-mono);font-size:0.65rem;color:var(--cream-ghost);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:0.25rem;">Diestros</p>
+          <p style="font-family:var(--font-display);font-size:1.6rem;font-weight:700;color:var(--cream);">93.2<span style="font-size:1rem;">%</span></p>
+        </div>
+      </div>
+      <div style="font-family:var(--font-mono);font-size:0.68rem;color:var(--cream-ghost);border-top:1px solid var(--border);padding-top:0.75rem;">
+        ♂ Masculino: n=42 (47.7%) &nbsp;·&nbsp; ♀ Femenino: n=46 (52.3%)
+      </div>
+    </div>
+
+    <!-- CHART 5: Sex & Alcohol -->
+    <div class="chart-card fade-in fade-in-delay-3">
+      <p class="chart-title">Consumo de alcohol · Por sexo</p>
+      <p class="chart-subtitle">Frecuencia de consumo declarado</p>
+      <div class="chart-wrap" style="height:200px;">
+        <canvas id="chartAlc" role="img" aria-label="Consumo de alcohol: 77.3% nunca o casi nunca, 22.7% más de una vez por semana">Consumo de alcohol por sexo.</canvas>
+      </div>
+    </div>
+
+  </div>
+</section>
+</div>
+
+<div class="divider"></div>
+
+<!-- ════════════ INSTRUMENTS ════════════ -->
+<section id="instruments">
+  <div class="fade-in">
+    <p class="section-tag">Protocolo de evaluación</p>
+    <h2 class="section-title">Batería Neuropsicológica</h2>
+    <p class="section-lead">14 instrumentos de evaluación validados para población colombiana. Administración aleatorizada para controlar sesgo de orden y condicionamiento cognitivo.</p>
+  </div>
+
+  <div class="instruments-grid fade-in fade-in-delay-1">
+    <div class="instrument-card">
+      <div class="instrument-icon ic-mem">MEM</div>
+      <div>
+        <p class="instrument-name">HVLT-R</p>
+        <p class="instrument-domain">Aprendizaje y memoria verbal</p>
+      </div>
+    </div>
+    <div class="instrument-card">
+      <div class="instrument-icon ic-exec">EXEC</div>
+      <div>
+        <p class="instrument-name">MWCST modificado</p>
+        <p class="instrument-domain">Función ejecutiva</p>
+      </div>
+    </div>
+    <div class="instrument-card">
+      <div class="instrument-icon ic-attn">SDMT</div>
+      <div>
+        <p class="instrument-name">Test de Símbolos y Dígitos</p>
+        <p class="instrument-domain">Velocidad de procesamiento</p>
+      </div>
+    </div>
+    <div class="instrument-card">
+      <div class="instrument-icon ic-attn">BTA</div>
+      <div>
+        <p class="instrument-name">Brief Test of Attention</p>
+        <p class="instrument-domain">Atención sostenida</p>
+      </div>
+    </div>
+    <div class="instrument-card">
+      <div class="instrument-icon ic-exec">TMT</div>
+      <div>
+        <p class="instrument-name">Trail Making Test A y B</p>
+        <p class="instrument-domain">Atención / función ejecutiva</p>
+      </div>
+    </div>
+    <div class="instrument-card">
+      <div class="instrument-icon ic-vis">REY</div>
+      <div>
+        <p class="instrument-name">Figura Compleja de Rey</p>
+        <p class="instrument-domain">Memoria visoespacial</p>
+      </div>
+    </div>
+    <div class="instrument-card">
+      <div class="instrument-icon ic-attn">STRP</div>
+      <div>
+        <p class="instrument-name">Test de Stroop</p>
+        <p class="instrument-domain">Control inhibitorio · atención</p>
+      </div>
+    </div>
+    <div class="instrument-card">
+      <div class="instrument-icon ic-lang">FLU</div>
+      <div>
+        <p class="instrument-name">Fluidez Verbal F-A-S / semántica</p>
+        <p class="instrument-domain">Lenguaje · función ejecutiva</p>
+      </div>
+    </div>
+    <div class="instrument-card">
+      <div class="instrument-icon ic-qol">SF36</div>
+      <div>
+        <p class="instrument-name">Escala de Calidad de Vida SF-36</p>
+        <p class="instrument-domain">Calidad de vida autopercibida</p>
+      </div>
+    </div>
+    <div class="instrument-card">
+      <div class="instrument-icon ic-acc">ACLT</div>
+      <div>
+        <p class="instrument-name">Cuestionario de Aculturación</p>
+        <p class="instrument-domain">Adaptado Marín &amp; Marín (1987) · α=0.86</p>
+      </div>
+    </div>
+    <div class="instrument-card">
+      <div class="instrument-icon ic-mem">MMSE</div>
+      <div>
+        <p class="instrument-name">Mini-Mental State Examination</p>
+        <p class="instrument-domain">Tamizaje cognitivo</p>
+      </div>
+    </div>
+    <div class="instrument-card">
+      <div class="instrument-icon ic-lang">PHQ9</div>
+      <div>
+        <p class="instrument-name">PHQ-9 (modificado)</p>
+        <p class="instrument-domain">Tamizaje depresión</p>
+      </div>
+    </div>
+    <div class="instrument-card">
+      <div class="instrument-icon ic-qol">BRTH</div>
+      <div>
+        <p class="instrument-name">Índice de Barthel (modificado)</p>
+        <p class="instrument-domain">Funcionalidad / independencia</p>
+      </div>
+    </div>
+    <div class="instrument-card">
+      <div class="instrument-icon ic-lang">LING</div>
+      <div>
+        <p class="instrument-name">Cuestionario Competencia Lingüística</p>
+        <p class="instrument-domain">Dominio español / Embera</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="ethics-strip fade-in fade-in-delay-2">
+    <div class="ethics-item">
+      <div class="ethics-dot"></div>
+      <p class="ethics-text"><strong>Aprobación ética</strong><br>Comité de Ética, Universidad de los Andes · Acta Nº 202001281 · enero 2020</p>
+    </div>
+    <div class="ethics-item">
+      <div class="ethics-dot"></div>
+      <p class="ethics-text"><strong>Consentimiento comunitario</strong><br>Asamblea general de la comunidad Embera Chami del Resguardo Chami Puru</p>
+    </div>
+    <div class="ethics-item">
+      <div class="ethics-dot"></div>
+      <p class="ethics-text"><strong>Consentimiento individual</strong><br>Firma de consentimiento informado por cada participante</p>
+    </div>
+    <div class="ethics-item">
+      <div class="ethics-dot"></div>
+      <p class="ethics-text"><strong>Cobertura</strong><br>87% de la población elegible de la comunidad participó en el estudio</p>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ════════════ ARTICLES ════════════ -->
+<section id="articles">
+  <div class="fade-in">
+    <p class="section-tag">Producción científica</p>
+    <h2 class="section-title">Artículos en desarrollo</h2>
+    <p class="section-lead">Dos artículos originales derivados de la tesis de maestría, orientados a revistas Q1 JCR en neuropsicología, epidemiología y salud pública indígena.</p>
+  </div>
+
+  <div class="articles-grid">
+    <div class="article-card art1 fade-in fade-in-delay-1">
+      <p class="article-number">Artículo 01 · /01_Articulo1</p>
+      <h3 class="article-title">Acculturation and Verbal Learning &amp; Memory Performance in Embera Chami Adults</h3>
+      <p class="article-desc">Asociación entre nivel de aculturación y rendimiento en pruebas de aprendizaje y memoria verbal (HVLT-R), controlando por edad, escolaridad e ingresos. Modelos de regresión múltiple con verificación de supuestos. Reporte STROBE.</p>
+      <div class="progress-label"><span>Progreso estimado</span><span id="prog1-pct">72%</span></div>
+      <div class="progress-bar-track"><div class="progress-bar-fill" data-target="72" id="prog1"></div></div>
+      <ul class="milestone-list">
+        <li class="done">Recolección y codificación de datos</li>
+        <li class="done">Análisis descriptivo · Tabla 1</li>
+        <li class="done">Pruebas de normalidad (KS)</li>
+        <li class="done">Modelos de regresión</li>
+        <li class="active">Redacción manuscrito (borrador 3)</li>
+        <li class="pending">Revisión adversarial interna</li>
+        <li class="pending">Envío a revista objetivo</li>
+      </ul>
+    </div>
+
+    <div class="article-card art2 fade-in fade-in-delay-2">
+      <p class="article-number">Artículo 02 · /02_Articulo2</p>
+      <h3 class="article-title">Neuropsychological Normative Data in Colombian Indigenous Population: Embera Chami Reference Values</h3>
+      <p class="article-desc">Datos normativos de toda la batería neuropsicológica (SDMT, BTA, TMT, Stroop, Rey, fluidez) estratificados por edad, sexo y escolaridad. Primer conjunto de baremos para población indígena colombiana adulta.</p>
+      <div class="progress-label"><span>Progreso estimado</span><span id="prog2-pct">38%</span></div>
+      <div class="progress-bar-track"><div class="progress-bar-fill" data-target="38" id="prog2"></div></div>
+      <ul class="milestone-list">
+        <li class="done">Limpieza de base de datos</li>
+        <li class="done">Estadísticos descriptivos por dominio</li>
+        <li class="active">Estratificación por edad/escolaridad</li>
+        <li class="pending">Tablas de percentiles</li>
+        <li class="pending">Análisis de regresión normativa</li>
+        <li class="pending">Redacción manuscrito</li>
+        <li class="pending">Envío a revista objetivo</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ════════════ TEAM ════════════ -->
+<section id="team">
+  <div class="fade-in">
+    <p class="section-tag">Equipo de investigación</p>
+    <h2 class="section-title">Investigadores</h2>
+  </div>
+
+  <div class="team-grid">
+    <div class="team-card fade-in fade-in-delay-1">
+      <div class="team-avatar av1">CZB</div>
+      <div>
+        <p class="team-name">Carlos E. Zapata Bohórquez</p>
+        <p class="team-role">Investigador Principal</p>
+      </div>
+      <p class="team-affil">Psicólogo · Magíster en Epidemiología · Doctorando en Ciencias de la Salud</p>
+      <div style="display:flex;flex-wrap:wrap;gap:0.4rem;margin-top:0.25rem;">
+        <span class="team-tag">Universidad de los Andes</span>
+        <span class="team-tag">UPNA, España</span>
+      </div>
+    </div>
+
+    <div class="team-card fade-in fade-in-delay-2">
+      <div class="team-avatar av2">ARV</div>
+      <div>
+        <p class="team-name">Andrea Ramírez Varela</p>
+        <p class="team-role">Co-investigadora</p>
+      </div>
+      <p class="team-affil">PhD en Epidemiología · Universidad Federal de Pelotas, 2019</p>
+      <div style="display:flex;flex-wrap:wrap;gap:0.4rem;margin-top:0.25rem;">
+        <span class="team-tag">Universidad de los Andes</span>
+      </div>
+    </div>
+
+    <div class="team-card fade-in fade-in-delay-3">
+      <div class="team-avatar av3">DRC</div>
+      <div>
+        <p class="team-name">Diego Fernando Rivera Camacho</p>
+        <p class="team-role">Co-investigador</p>
+      </div>
+      <p class="team-affil">PhD en Psicología · Universidad de Deusto, 2016. Especialista en neuropsicología colombiana</p>
+      <div style="display:flex;flex-wrap:wrap;gap:0.4rem;margin-top:0.25rem;">
+        <span class="team-tag">Universidad de Navarra</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ════════════ FOOTER ════════════ -->
+<footer>
+  <div class="footer-inner">
+    <div class="footer-left">
+      <p><strong>Neuro-Aculturación Embera Chami</strong></p>
+      <p>Tesis de Maestría en Epidemiología · Universidad de los Andes · 2020</p>
+      <p style="margin-top:0.5rem;font-family:var(--font-mono);font-size:0.7rem;color:var(--cream-ghost);">
+        Reporte: STROBE · Análisis: R (tidyverse, lme4, psych) · Estándar: APA 7
+      </p>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:0.75rem;align-items:flex-end;">
+      <a href="https://github.com/CarlosZapataB123/Neuroaculturacion_Embera" target="_blank" rel="noopener" class="footer-link">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"></path></svg>
+        Ver repositorio →
+      </a>
+      <p style="font-family:var(--font-mono);font-size:0.68rem;color:var(--cream-ghost);">
+        Open Research · Datos disponibles bajo solicitud
+      </p>
+    </div>
+  </div>
+</footer>
+
+<script>
+/* ── SCROLL PROGRESS ── */
+window.addEventListener('scroll', () => {
+  const el = document.documentElement;
+  const pct = (el.scrollTop / (el.scrollHeight - el.clientHeight)) * 100;
+  document.getElementById('scroll-bar').style.width = pct.toFixed(1) + '%';
+});
+
+/* ── NEURAL CANVAS ── */
+(function(){
+  const canvas = document.getElementById('neural-canvas');
+  const ctx = canvas.getContext('2d');
+  let W, H, nodes, raf;
+  const NUM = 55, CONN_DIST = 160, COLORS = ['#C8703A','#4A8B6F','#D4A853'];
+
+  function init(){
+    W = canvas.width = canvas.offsetWidth;
+    H = canvas.height = canvas.offsetHeight;
+    nodes = Array.from({length: NUM}, () => ({
+      x: Math.random() * W, y: Math.random() * H,
+      vx: (Math.random() - 0.5) * 0.45,
+      vy: (Math.random() - 0.5) * 0.45,
+      r: Math.random() * 2 + 1.5,
+      c: COLORS[Math.floor(Math.random() * COLORS.length)]
+    }));
+  }
+
+  function draw(){
+    ctx.clearRect(0, 0, W, H);
+    for(let i = 0; i < nodes.length; i++){
+      const a = nodes[i];
+      for(let j = i+1; j < nodes.length; j++){
+        const b = nodes[j];
+        const d = Math.hypot(a.x - b.x, a.y - b.y);
+        if(d < CONN_DIST){
+          ctx.beginPath();
+          ctx.moveTo(a.x, a.y);
+          ctx.lineTo(b.x, b.y);
+          ctx.strokeStyle = `rgba(240,235,225,${(1 - d/CONN_DIST) * 0.18})`;
+          ctx.lineWidth = 0.8;
+          ctx.stroke();
+        }
+      }
+      ctx.beginPath();
+      ctx.arc(a.x, a.y, a.r, 0, Math.PI * 2);
+      ctx.fillStyle = a.c + '99';
+      ctx.fill();
+
+      a.x += a.vx; a.y += a.vy;
+      if(a.x < 0 || a.x > W) a.vx *= -1;
+      if(a.y < 0 || a.y > H) a.vy *= -1;
+    }
+    raf = requestAnimationFrame(draw);
+  }
+
+  window.addEventListener('resize', () => { cancelAnimationFrame(raf); init(); draw(); });
+  init(); draw();
+})();
+
+/* ── COUNTER ANIMATION ── */
+function animateCounter(el, target, decimals, prefix, suffix, duration){
+  const start = performance.now();
+  function update(now){
+    const t = Math.min((now - start) / duration, 1);
+    const eased = 1 - Math.pow(1 - t, 3);
+    const val = eased * target;
+    if(decimals > 0){
+      el.innerHTML = (prefix || '') + val.toFixed(decimals) + (suffix || '');
+    } else {
+      el.innerHTML = (prefix || '') + Math.round(val) + (suffix || '');
+    }
+    if(t < 1) requestAnimationFrame(update);
+  }
+  requestAnimationFrame(update);
+}
+
+const statsObserver = new IntersectionObserver((entries) => {
+  entries.forEach(e => {
+    if(e.isIntersecting){
+      animateCounter(document.getElementById('cnt-n'), 87, 0, '', '<span>%</span>', 1800);
+      animateCounter(document.getElementById('cnt-part'), 88, 0, '', '', 1500);
+      animateCounter(document.getElementById('cnt-inst'), 14, 0, '', '', 1200);
+      animateCounter(document.getElementById('cnt-alpha'), 0.86, 2, '', '', 2000);
+      animateCounter(document.getElementById('cnt-art'), 2, 0, '', '', 1000);
+      statsObserver.disconnect();
+    }
+  });
+}, { threshold: 0.3 });
+statsObserver.observe(document.getElementById('hero'));
+
+/* ── FADE-IN ON SCROLL ── */
+const fadeEls = document.querySelectorAll('.fade-in');
+const fadeObs = new IntersectionObserver((entries) => {
+  entries.forEach(e => {
+    if(e.isIntersecting) e.target.classList.add('visible');
+  });
+}, { threshold: 0.12 });
+fadeEls.forEach(el => fadeObs.observe(el));
+
+/* ── PROGRESS BARS ON SCROLL ── */
+const progObs = new IntersectionObserver((entries) => {
+  entries.forEach(e => {
+    if(e.isIntersecting){
+      document.querySelectorAll('.progress-bar-fill').forEach(bar => {
+        bar.style.width = bar.dataset.target + '%';
+      });
+      progObs.disconnect();
+    }
+  });
+}, { threshold: 0.3 });
+const artSec = document.getElementById('articles');
+if(artSec) progObs.observe(artSec);
+
+/* ══════════════════ CHARTS ══════════════════ */
+const gridColor = 'rgba(240,235,225,0.07)';
+const tickColor = '#9a9490';
+const chartFont = { family: "'DM Sans', sans-serif", size: 11 };
+Chart.defaults.color = tickColor;
+Chart.defaults.font = chartFont;
+
+/* CHART 1 — Age distribution horizontal bar */
+new Chart(document.getElementById('chartAge'), {
+  type: 'bar',
+  data: {
+    labels: ['18–29', '30–39', '40–49', '50–59', '60+'],
+    datasets: [{
+      label: 'Participantes',
+      data: [39, 26, 15, 5, 3],
+      backgroundColor: ['#C8703Acc','#B86030bb','#a85020aa','#985040aa','#884030aa'],
+      borderWidth: 0
+    }]
+  },
+  options: {
+    indexAxis: 'y',
+    responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { display: false } },
+    scales: {
+      x: {
+        grid: { color: gridColor }, ticks: { color: tickColor },
+        border: { color: 'transparent' }
+      },
+      y: { grid: { display: false }, ticks: { color: '#b8b0a4' }, border: { color: 'transparent' } }
+    }
+  }
+});
+
+/* CHART 2 — Education donut */
+const eduColors = ['#555049','#8a4c27','#C8703A','#D4A853'];
+const eduLabels = ['Sin escolaridad','Primaria','Secundaria','Superior'];
+const eduData = [16, 28, 40, 4];
+new Chart(document.getElementById('chartEdu'), {
+  type: 'doughnut',
+  data: {
+    labels: eduLabels,
+    datasets: [{ data: eduData, backgroundColor: eduColors, borderWidth: 0, hoverOffset: 4 }]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ` ${ctx.label}: ${ctx.raw} (${(ctx.raw/88*100).toFixed(1)}%)` } } },
+    cutout: '62%'
+  }
+});
+const legend = document.getElementById('edu-legend');
+eduLabels.forEach((l, i) => {
+  legend.innerHTML += `<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;white-space:nowrap;"><span style="width:10px;height:10px;border-radius:2px;background:${eduColors[i]};display:inline-block;flex-shrink:0;"></span><span style="font-size:0.78rem;color:#b8b0a4;">${l} <strong style="color:#F0EBE1;">${(eduData[i]/88*100).toFixed(1)}%</strong></span></div>`;
+});
+
+/* CHART 3 — Occupation grouped bar */
+new Chart(document.getElementById('chartOcc'), {
+  type: 'bar',
+  data: {
+    labels: ['Agricultura', 'Ama de casa', 'Artesanías', 'Líderes'],
+    datasets: [
+      { label: 'Masculino', data: [19, 0, 16, 7], backgroundColor: '#4A8B6Fcc', borderWidth: 0 },
+      { label: 'Femenino', data: [1, 20, 24, 1], backgroundColor: '#D4A853bb', borderWidth: 0 }
+    ]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { display: false } },
+    scales: {
+      x: { grid: { color: gridColor }, ticks: { color: tickColor }, border: { color: 'transparent' } },
+      y: { grid: { color: gridColor }, ticks: { color: tickColor }, border: { color: 'transparent' } }
+    }
+  }
+});
+document.getElementById('chartOcc').insertAdjacentHTML('afterend',
+  `<div style="display:flex;gap:1rem;margin-top:8px;font-size:0.75rem;">
+    <span style="display:flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;background:#4A8B6F;border-radius:2px;display:inline-block;"></span><span style="color:#9a9490;">Masculino</span></span>
+    <span style="display:flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;background:#D4A853;border-radius:2px;display:inline-block;"></span><span style="color:#9a9490;">Femenino</span></span>
+  </div>`);
+
+/* CHART 4 — Income */
+new Chart(document.getElementById('chartIncome'), {
+  type: 'bar',
+  data: {
+    labels: ['0–200k', '200–400k', '400–600k', '800–1M', '>1M'],
+    datasets: [{
+      label: 'n',
+      data: [62, 19, 5, 1, 1],
+      backgroundColor: '#C8703A99',
+      borderColor: '#C8703A',
+      borderWidth: 1,
+      borderRadius: 2
+    }]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { display: false } },
+    scales: {
+      x: { grid: { display: false }, ticks: { color: tickColor, font: { size: 10 } }, border: { color: 'transparent' } },
+      y: { grid: { color: gridColor }, ticks: { color: tickColor }, border: { color: 'transparent' } }
+    }
+  }
+});
+
+/* CHART 5 — Alcohol by sex */
+new Chart(document.getElementById('chartAlc'), {
+  type: 'bar',
+  data: {
+    labels: ['Nunca / casi nunca', 'Más de una vez/semana'],
+    datasets: [
+      { label: 'Masculino', data: [31, 11], backgroundColor: '#4A8B6Fcc', borderWidth: 0 },
+      { label: 'Femenino', data: [37, 9], backgroundColor: '#D4A853bb', borderWidth: 0 }
+    ]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { display: false } },
+    scales: {
+      x: { grid: { display: false }, ticks: { color: tickColor, font: { size: 10 } }, border: { color: 'transparent' } },
+      y: { grid: { color: gridColor }, ticks: { color: tickColor }, border: { color: 'transparent' } }
+    }
+  }
+});
+</script>
+</body>
+</html>
